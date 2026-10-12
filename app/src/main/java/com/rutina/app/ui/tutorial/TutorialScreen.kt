@@ -230,7 +230,8 @@ private fun NavBox(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: 
 private fun PhonePreview(guide: Guide) {
     BoxWithConstraints(Modifier.fillMaxSize().padding(top = 20.dp), contentAlignment = Alignment.TopCenter) {
         val w = 250.dp
-        val h = maxHeight + 40.dp // el teléfono "sigue" por debajo del panel
+        val areaH = maxHeight
+        val h = areaH + 40.dp // el teléfono "sigue" por debajo del panel
         Box(
             Modifier.width(w).height(h)
                 .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
@@ -242,7 +243,7 @@ private fun PhonePreview(guide: Guide) {
             MockScreen(guide.mock)
             guide.tap?.let { t ->
                 val innerW = w - 12.dp
-                val visibleH = maxHeight - 26.dp
+                val visibleH = areaH - 26.dp
                 Box(
                     Modifier
                         .offset(x = innerW * t.x - 18.dp, y = visibleH * t.y - 18.dp)
