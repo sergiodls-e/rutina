@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -34,6 +35,9 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -73,7 +77,9 @@ import com.rutina.app.data.Task
 import com.rutina.app.data.TrackingType
 import com.rutina.app.domain.HabitLogic
 import kotlinx.coroutines.delay
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -99,7 +105,9 @@ fun TodayScreen(
                 title = {
                     Text(
                         if (state.date == LocalDate.now()) "Hoy" else state.date.format(
-                            java.time.format.DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", es)
+                            java.time.format.DateTimeFormatter.ofPattern(
+                                if (state.date.year == LocalDate.now().year) "EEEE d 'de' MMMM" else "EEEE d 'de' MMMM yyyy", es,
+                            )
                         ).replaceFirstChar { it.uppercase() },
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable { vm.select(LocalDate.now()) },
@@ -183,41 +191,95 @@ fun TodayScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WeekStrip(selected: LocalDate, vm: TodayViewModel, onSelect: (LocalDate) -> Unit) {
     val start = HabitLogic.weekStartOf(selected, vm.weekStart)
+    val end = start.plusDays(6)
     val today = LocalDate.now()
-    Row(
-        Modifier.fillMaxWidth().background(Color.Black).padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        IconButton(onClick = { onSelect(selected.minusWeeks(1)) }, modifier = Modifier.size(28.dp).align(Alignment.CenterVertically)) {
-            Text("‹", fontSize = 22.sp)
-        }
-        (0 until 7).forEach { i ->
-            val d = start.plusDays(i.toLong())
-            val isSel = d == selected
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF333333))
-                    .then(if (isSel) Modifier.border(2.dp, Color(0xFF777777), RoundedCornerShape(8.dp)) else Modifier)
-                    .clickable { onSelect(d) }
-                    .padding(vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+    var showPicker by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxWidth().background(Color.Black)) {
+        // Mes y año de la semana visible (si cruza de mes o de año, se muestran ambos)
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFF2A2A2A))
+                    .clickable { showPicker = true }.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    d.dayOfWeek.getDisplayName(TextStyle.SHORT, es).replace(".", "").replaceFirstChar { it.uppercase() },
-                    fontSize = 12.sp,
-                    color = if (d == today) Color(0xFF8FD3C1) else Color(0xFFB8B8B8),
-                )
-                Text(d.dayOfMonth.toString(), fontSize = 22.sp, color = Color.White)
+                Text(monthYearLabel(start, end), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.Filled.CalendarMonth, "Elegir fecha", Modifier.size(16.dp), tint = Color(0xFFB8B8B8))
+            }
+            Spacer(Modifier.weight(1f))
+            if (selected != today) {
+                TextButton(onClick = { onSelect(today) }) { Text("Hoy") }
             }
         }
-        IconButton(onClick = { onSelect(selected.plusWeeks(1)) }, modifier = Modifier.size(28.dp).align(Alignment.CenterVertically)) {
-            Text("›", fontSize = 22.sp)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            IconButton(onClick = { onSelect(selected.minusWeeks(1)) }, modifier = Modifier.size(28.dp).align(Alignment.CenterVertically)) {
+                Text("‹", fontSize = 22.sp)
+            }
+            (0 until 7).forEach { i ->
+                val d = start.plusDays(i.toLong())
+                val isSel = d == selected
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF333333))
+                        .then(if (isSel) Modifier.border(2.dp, Color(0xFF777777), RoundedCornerShape(8.dp)) else Modifier)
+                        .clickable { onSelect(d) }
+                        .padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        d.dayOfWeek.getDisplayName(TextStyle.SHORT, es).replace(".", "").replaceFirstChar { it.uppercase() },
+                        fontSize = 12.sp,
+                        color = if (d == today) Color(0xFF8FD3C1) else Color(0xFFB8B8B8),
+                    )
+                    Text(d.dayOfMonth.toString(), fontSize = 22.sp, color = Color.White)
+                }
+            }
+            IconButton(onClick = { onSelect(selected.plusWeeks(1)) }, modifier = Modifier.size(28.dp).align(Alignment.CenterVertically)) {
+                Text("›", fontSize = 22.sp)
+            }
         }
+    }
+
+    if (showPicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selected.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let {
+                        onSelect(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate())
+                    }
+                    showPicker = false
+                }) { Text("Ir") }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancelar") } },
+        ) { DatePicker(state = pickerState) }
+    }
+}
+
+/** "Octubre 2026", "Sep – Oct 2026" o "Dic 2026 – Ene 2027". */
+private fun monthYearLabel(start: LocalDate, end: LocalDate): String {
+    fun full(d: LocalDate) = d.month.getDisplayName(TextStyle.FULL, es).replaceFirstChar { it.uppercase() }
+    fun short(d: LocalDate) = d.month.getDisplayName(TextStyle.SHORT, es).replace(".", "").replaceFirstChar { it.uppercase() }
+    return when {
+        start.month == end.month -> "${full(start)} ${start.year}"
+        start.year == end.year -> "${short(start)} – ${short(end)} ${end.year}"
+        else -> "${short(start)} ${start.year} – ${short(end)} ${end.year}"
     }
 }
 
