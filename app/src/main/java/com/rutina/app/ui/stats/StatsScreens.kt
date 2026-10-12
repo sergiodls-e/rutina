@@ -222,7 +222,8 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
                     cellFor = { d -> HabitStats.cell(h, d, s.totals, s.resets, today) },
                     selected = today,
                 )
-                CellLegend(color, showFail = h.type == TrackingType.QUIT || h.goalType == GoalType.NEGATIVE)
+                if (h.type == TrackingType.QUIT) CellLegend(color, showFail = true, doneLabel = "Sin recaída", failLabel = "Recaída", showPartial = false)
+                else CellLegend(color, showFail = h.goalType == GoalType.NEGATIVE)
             }
 
             if (s.chart.isNotEmpty()) {
@@ -273,9 +274,9 @@ private fun QuitHeader(h: Habit, q: com.rutina.app.domain.QuitSummary) {
         Text(HabitLogic.formatElapsed(current), fontSize = 28.sp, fontWeight = FontWeight.Bold)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Tile("Mejor racha", HabitLogic.formatElapsed(maxOf(q.bestMs, current)).substringBefore(","), "", Modifier.weight(1f))
+        Tile("Mejor racha", HabitLogic.formatShort(maxOf(q.bestMs, current)), "sin recaer", Modifier.weight(1f))
         Tile("Recaídas", "${q.relapses.size}", "en total", Modifier.weight(1f))
-        Tile("Desde", stampLabel(h.createdAt).substringBefore(","), "", Modifier.weight(1f))
+        Tile("Desde", stampLabel(h.createdAt).substringBefore(","), "inicio", Modifier.weight(1f))
     }
 }
 

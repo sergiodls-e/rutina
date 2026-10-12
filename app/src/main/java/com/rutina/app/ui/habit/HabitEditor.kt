@@ -112,15 +112,40 @@ class HabitEditorViewModel(
     val habit: StateFlow<Habit> = _habit
     val isEdit = editId > 0
 
+    /** Tipo con el que se cargó el hábito (para detectar cambios de tipo). */
+    private var originalType: TrackingType? = null
+    private val _logCount = MutableStateFlow(0)
+    val logCount: StateFlow<Int> = _logCount
+
     init {
-        if (isEdit) viewModelScope.launch { db.habits().get(editId)?.let { _habit.value = it } }
+        if (isEdit) viewModelScope.launch {
+            db.habits().get(editId)?.let { _habit.value = it; originalType = it.type }
+            _logCount.value = db.habits().countLogs(editId)
+        }
     }
+
+    /** Cambiar de tipo en un hábito existente reinicia su historial (los registros significan otra cosa). */
+    fun typeChanged(): Boolean = isEdit && originalType != null && originalType != _habit.value.type
+
+    /** Se puede elegir la fecha de inicio de un hábito de Dejar al crearlo o al convertirlo. */
+    fun canPickQuitStart(): Boolean = _habit.value.type == TrackingType.QUIT && (!isEdit || typeChanged())
 
     fun update(transform: (Habit) -> Habit) { _habit.value = transform(_habit.value) }
 
     fun save(onDone: () -> Unit) = viewModelScope.launch {
+        val now = System.currentTimeMillis()
         var h = _habit.value.copy(name = _habit.value.name.trim())
-        if (h.type == TrackingType.QUIT && h.quitSince == null) h = h.copy(quitSince = System.currentTimeMillis())
+        val fresh = typeChanged()
+        if (fresh) {
+            // Historial limpio: los registros anteriores tenían otro significado.
+            db.habits().deleteLogsFor(h.id)
+            h = h.copy(createdAt = now, quitSince = if (h.type == TrackingType.QUIT) h.quitSince else null)
+        }
+        if (h.type == TrackingType.QUIT) {
+            val since = (h.quitSince ?: now).coerceAtMost(now)
+            // El historial empieza cuando lo dejaste (puede ser antes de crear el hábito).
+            h = h.copy(quitSince = since, createdAt = if (!isEdit || fresh) minOf(h.createdAt, since) else h.createdAt)
+        }
         if (isEdit) db.habits().update(h) else db.habits().insert(h)
         onDone()
     }
@@ -205,6 +230,10 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
     var showColors by remember { mutableStateOf(false) }
     var showTypes by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmType by remember { mutableStateOf(false) }
+    var pickQuitDate by remember { mutableStateOf(false) }
+    var pickQuitTime by remember { mutableStateOf<java.time.LocalDate?>(null) }
+    val logCount by vm.logCount.collectAsStateWithLifecycle()
     val color = Color(h.color)
 
     Scaffold(
@@ -226,6 +255,7 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                 Button(
                     onClick = {
                         if (h.name.isBlank()) Toast.makeText(ctx, "El nombre de tu hábito no puede estar vacío.", Toast.LENGTH_SHORT).show()
+                        else if (vm.typeChanged() && logCount > 0) confirmType = true
                         else vm.save(onClose)
                     },
                     modifier = Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(12.dp),
@@ -342,9 +372,25 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                     }
                 }
             } else if (h.type == TrackingType.QUIT) {
+                if (vm.canPickQuitStart()) {
+                    FormRow("Lo dejé desde") {
+                        Pill(onClick = { pickQuitDate = true }) {
+                            Text(h.quitSince?.let { com.rutina.app.ui.journal.stampLabel(it) } ?: "Ahora")
+                        }
+                    }
+                }
                 Text(
-                    "El contador empieza al guardar. Si recaes, toca el hábito y elige \"Reiniciar contador\".",
+                    if (vm.canPickQuitStart()) "Si ya lo habías dejado, elige desde cuándo; si no, el contador empieza al guardar. " +
+                        "Si recaes, toca el hábito y elige \"Reiniciar contador\"."
+                    else "Si recaes, toca el hábito y elige \"Reiniciar contador\".",
                     modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (vm.typeChanged()) {
+                Text(
+                    "Cambiaste el tipo de seguimiento: al guardar, este hábito empieza con historial limpio.",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.error, fontSize = 13.sp,
                 )
             }
 
@@ -376,7 +422,10 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                                     vm.update {
                                         val wasJournal = it.type == TrackingType.JOURNAL
                                         when (t.type) {
-                                            TrackingType.QUIT -> it.copy(type = t.type, goalType = GoalType.NONE)
+                                            TrackingType.QUIT -> it.copy(
+                                                type = t.type, goalType = GoalType.NONE,
+                                                period = GoalPeriod.DAY, scheduleType = ScheduleType.ALL_DAYS,
+                                            )
                                             TrackingType.JOURNAL -> it.copy(
                                                 type = t.type, goalType = GoalType.POSITIVE, unit = "palabras",
                                                 target = if (wasJournal) it.target else 100.0,
@@ -407,6 +456,66 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                 }
             },
             confirmButton = { TextButton(onClick = { showTypes = false }) { Text("Cerrar") } },
+        )
+    }
+
+    if (confirmType) {
+        AlertDialog(
+            onDismissRequest = { confirmType = false },
+            title = { Text("¿Cambiar el tipo de seguimiento?") },
+            text = {
+                Text(
+                    "Este hábito tiene $logCount registros que significan otra cosa con el tipo nuevo. " +
+                        "Al cambiarlo se borran y empieza con historial limpio. Tus notas del diario no se tocan."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmType = false; vm.save(onClose) }) {
+                    Text("Cambiar y empezar de cero", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmType = false }) { Text("Cancelar") } },
+        )
+    }
+
+    if (pickQuitDate) {
+        val init = java.time.Instant.ofEpochMilli(h.quitSince ?: System.currentTimeMillis()).atZone(java.time.ZoneOffset.UTC)
+        val st = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = HabitLogic.dateOf(h.quitSince ?: System.currentTimeMillis())
+                .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= System.currentTimeMillis()
+            },
+        )
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { pickQuitDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickQuitTime = st.selectedDateMillis?.let {
+                        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                    } ?: init.toLocalDate()
+                    pickQuitDate = false
+                }) { Text("Siguiente") }
+            },
+            dismissButton = { TextButton(onClick = { pickQuitDate = false }) { Text("Cancelar") } },
+        ) { androidx.compose.material3.DatePicker(state = st) }
+    }
+
+    pickQuitTime?.let { day ->
+        val cur = java.time.Instant.ofEpochMilli(h.quitSince ?: System.currentTimeMillis()).atZone(HabitLogic.zone)
+        val st = androidx.compose.material3.rememberTimePickerState(initialHour = cur.hour, initialMinute = cur.minute, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { pickQuitTime = null },
+            title = { Text("Hora") },
+            text = { androidx.compose.material3.TimePicker(state = st) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ms = day.atTime(st.hour, st.minute).atZone(HabitLogic.zone).toInstant().toEpochMilli()
+                    vm.update { it.copy(quitSince = ms.coerceAtMost(System.currentTimeMillis())) }
+                    pickQuitTime = null
+                }) { Text("Aceptar") }
+            },
+            dismissButton = { TextButton(onClick = { pickQuitTime = null }) { Text("Cancelar") } },
         )
     }
 

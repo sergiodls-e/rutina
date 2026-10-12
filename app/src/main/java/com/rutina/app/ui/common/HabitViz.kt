@@ -201,12 +201,18 @@ private fun monthShort(d: LocalDate) =
 
 /** Leyenda de colores para calendarios. */
 @Composable
-fun CellLegend(color: Color, showFail: Boolean) {
+fun CellLegend(
+    color: Color,
+    showFail: Boolean,
+    doneLabel: String = "Cumplido",
+    failLabel: String = "Fallado",
+    showPartial: Boolean = true,
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        LegendItem(color, "Cumplido")
-        LegendItem(color.copy(alpha = 0.5f), "Parcial")
-        if (showFail) LegendItem(FailColor, "Fallado")
-        LegendItem(EmptyColor, "Sin registro")
+        LegendItem(color, doneLabel)
+        if (showPartial) LegendItem(color.copy(alpha = 0.5f), "Parcial")
+        if (showFail) LegendItem(FailColor, failLabel)
+        if (showPartial) LegendItem(EmptyColor, "Sin registro")
     }
 }
 

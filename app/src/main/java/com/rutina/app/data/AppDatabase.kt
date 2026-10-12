@@ -12,7 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Habit::class, HabitLog::class, Task::class, TaskList::class,
         Note::class, TimerSession::class, TaskFilter::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,9 +46,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v3 → v4: limpieza. Si un hábito se convirtió a "Dejar", sus registros viejos de
+         * Recuento se contaban como recaídas. Las recaídas reales siempre llevan nota.
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "DELETE FROM `habit_logs` WHERE `note` IS NULL AND `habitId` IN " +
+                        "(SELECT `id` FROM `habits` WHERE `type` = 'QUIT')"
+                )
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "rutina.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

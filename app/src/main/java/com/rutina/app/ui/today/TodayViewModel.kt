@@ -8,6 +8,7 @@ import com.rutina.app.data.Habit
 import com.rutina.app.data.HabitLog
 import com.rutina.app.data.Note
 import com.rutina.app.data.Task
+import com.rutina.app.data.TaskOps
 import com.rutina.app.data.TaskFilter
 import com.rutina.app.data.TaskList
 import com.rutina.app.data.TrackingType
@@ -233,16 +234,5 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
      * Completar una tarea que se repite la deja en el historial como hecha
      * y crea la siguiente ocurrencia.
      */
-    fun toggleTask(task: Task) = viewModelScope.launch {
-        if (task.done) {
-            db.tasks().update(task.copy(done = false, doneAt = null))
-            return@launch
-        }
-        db.tasks().update(task.copy(done = true, doneAt = System.currentTimeMillis()))
-        TaskLogic.nextDue(task)?.let { next ->
-            db.tasks().insert(
-                task.copy(id = 0, done = false, doneAt = null, dueEpochDay = next.toEpochDay(), createdAt = System.currentTimeMillis())
-            )
-        }
-    }
+    fun toggleTask(task: Task) = viewModelScope.launch { TaskOps.toggle(db, task) }
 }

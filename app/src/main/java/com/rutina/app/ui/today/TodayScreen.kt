@@ -507,7 +507,7 @@ private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit, 
             Spacer(Modifier.weight(1f))
             Text(
                 if (isQuit) HabitLogic.formatElapsed(now - (h.quitSince ?: h.createdAt))
-                else "${HabitLogic.formatNumber(row.progress)} / ${HabitLogic.amountLabel(h.target, h.unit)}",
+                else HabitLogic.progressLabel(h, row.progress),
                 fontSize = 14.sp, textAlign = TextAlign.End, modifier = Modifier.widthIn(max = 140.dp),
             )
             Spacer(Modifier.width(8.dp))
@@ -686,14 +686,14 @@ private fun HabitActionsDialog(
                     TrackingType.QUIT ->
                         Text("¿Recaíste? Reiniciar pone el contador en cero y queda registrado en tu diario.")
                     TrackingType.JOURNAL -> {
-                        Text("Progreso: ${HabitLogic.formatNumber(row.progress)} / ${HabitLogic.amountLabel(h.target, h.unit)}")
+                        Text("Progreso: ${HabitLogic.progressLabel(h, row.progress)}")
                         Text(
                             "Las palabras se cuentan de las notas del diario etiquetadas con este hábito.",
                             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     else -> {
-                        Text("Progreso: ${HabitLogic.formatNumber(row.progress)} / ${HabitLogic.amountLabel(h.target, h.unit)}")
+                        Text("Progreso: ${HabitLogic.progressLabel(h, row.progress)}")
                         OutlinedTextField(
                             amount, { amount = it.replace(',', '.') },
                             label = { Text("Cantidad (${h.unit})") },

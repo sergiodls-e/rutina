@@ -51,6 +51,15 @@ interface HabitDao {
     @Delete
     suspend fun deleteLog(log: HabitLog)
 
+    @Query("DELETE FROM habit_logs WHERE habitId = :habitId")
+    suspend fun deleteLogsFor(habitId: Long)
+
+    @Query("SELECT MAX(timestamp) FROM habit_logs WHERE habitId = :habitId")
+    suspend fun lastLogTime(habitId: Long): Long?
+
+    @Query("SELECT COUNT(*) FROM habit_logs WHERE habitId = :habitId")
+    suspend fun countLogs(habitId: Long): Int
+
     @Query(
         "DELETE FROM habit_logs WHERE id = (SELECT id FROM habit_logs " +
             "WHERE habitId = :habitId AND timestamp >= :from AND timestamp < :to " +
@@ -75,6 +84,10 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun get(id: Long): Task?
+
+    /** Borra la ocurrencia que se generó al completar una tarea repetida (si sigue pendiente). */
+    @Query("DELETE FROM tasks WHERE title = :title AND dueEpochDay = :due AND done = 0 AND createdAt >= :createdAfter")
+    suspend fun deleteGeneratedNext(title: String, due: Long, createdAfter: Long)
 
     @Query("SELECT * FROM task_lists ORDER BY sortOrder, id")
     fun observeLists(): Flow<List<TaskList>>

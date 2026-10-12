@@ -124,7 +124,33 @@ object HabitLogic {
         return buildString {
             if (d > 0) append("${d}d, ")
             if (d > 0 || h > 0) append("${h}h ")
-            append("${m}min, ${sec}s")
+            if (d > 0 || h > 0 || m > 0) append("${m}min, ")
+            append("${sec}s")
+        }
+    }
+
+    /** Duración corta para tarjetas: "35 d 4 h", "11 h 20 min", "45 min", "57 s". */
+    fun formatShort(millis: Long): String {
+        val s = (millis / 1000).coerceAtLeast(0)
+        val d = s / 86400
+        val h = (s % 86400) / 3600
+        val m = (s % 3600) / 60
+        return when {
+            d > 0 -> if (h > 0) "$d d $h h" else "$d d"
+            h > 0 -> if (m > 0) "$h h $m min" else "$h h"
+            m > 0 -> "$m min"
+            else -> "$s s"
+        }
+    }
+
+    /** Texto de progreso: "2 / 3 veces", "2 veces" sin meta, con "por semana/mes" si aplica. */
+    fun progressLabel(h: com.rutina.app.data.Habit, progress: Double): String {
+        val base = if (h.goalType == com.rutina.app.data.GoalType.NONE) amountLabel(progress, h.unit)
+        else "${formatNumber(progress)} / ${amountLabel(h.target, h.unit)}"
+        return base + when (h.period) {
+            com.rutina.app.data.GoalPeriod.DAY -> ""
+            com.rutina.app.data.GoalPeriod.WEEK -> " · sem"
+            com.rutina.app.data.GoalPeriod.MONTH -> " · mes"
         }
     }
 

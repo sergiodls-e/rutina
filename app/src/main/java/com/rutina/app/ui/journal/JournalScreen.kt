@@ -240,7 +240,7 @@ fun JournalScreen(
                 TextButton(onClick = {
                     when (e) {
                         is NoteEntry -> vm.deleteNote(e.note)
-                        is HabitEntry -> vm.deleteLog(e.log)
+                        is HabitEntry -> vm.deleteLog(e.log, e.habit)
                         is TaskEntry -> Unit
                     }
                     confirmDelete = null

@@ -9,6 +9,7 @@ import com.rutina.app.data.Habit
 import com.rutina.app.data.HabitLog
 import com.rutina.app.data.Note
 import com.rutina.app.data.Task
+import com.rutina.app.data.TaskOps
 import com.rutina.app.data.TaskList
 import com.rutina.app.data.TrackingType
 import com.rutina.app.domain.HabitLogic
@@ -165,11 +166,21 @@ class JournalViewModel(private val db: AppDatabase) : ViewModel() {
     }
 
     fun saveLogNote(l: HabitLog, text: String) = viewModelScope.launch {
-        db.habits().updateLog(l.copy(note = text.trim().ifBlank { null }))
+        // Las recaídas conservan su marca aunque se borre la nota.
+        val fallback = if (l.note == "reinicio") "reinicio" else null
+        db.habits().updateLog(l.copy(note = text.trim().ifBlank { fallback }))
     }
-    fun deleteLog(l: HabitLog) = viewModelScope.launch { db.habits().deleteLog(l) }
 
-    fun reopenTask(t: Task) = viewModelScope.launch { db.tasks().update(t.copy(done = false, doneAt = null)) }
+    /** Borra un registro. Si era la última recaída de un hábito de Dejar, el contador vuelve a la anterior. */
+    fun deleteLog(l: HabitLog, habit: Habit) = viewModelScope.launch {
+        db.habits().deleteLog(l)
+        if (habit.type == TrackingType.QUIT && habit.quitSince == l.timestamp) {
+            val prev = db.habits().lastLogTime(habit.id)
+            db.habits().update(habit.copy(quitSince = prev ?: habit.createdAt))
+        }
+    }
+
+    fun reopenTask(t: Task) = viewModelScope.launch { TaskOps.reopen(db, t) }
 
     // ------------------------------------------------------------ exportar
 
