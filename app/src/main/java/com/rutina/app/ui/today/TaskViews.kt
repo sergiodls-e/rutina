@@ -349,3 +349,76 @@ fun SmartChips(parsed: Parsed?, modifier: Modifier = Modifier) {
         }
     }
 }
+
+
+// ---------------------------------------------------------------- hábitos: agrupar / ordenar
+
+@Composable
+internal fun HabitSortMenuButton(
+    groupBy: com.rutina.app.data.HabitGroupBy,
+    sortBy: com.rutina.app.data.HabitSortBy,
+    onGroup: (com.rutina.app.data.HabitGroupBy) -> Unit,
+    onSort: (com.rutina.app.data.HabitSortBy) -> Unit,
+    onReorder: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Filled.Sort, "Agrupar y ordenar hábitos", tint = Color.White) }
+        DropdownMenu(open, { open = false }) {
+            Text("Agrupar hábitos por", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            com.rutina.app.data.HabitGroupBy.entries.forEach { g ->
+                DropdownMenuItem(
+                    text = { Text(g.label) },
+                    leadingIcon = { if (g == groupBy) Icon(Icons.Filled.Check, null) else Spacer(Modifier.size(24.dp)) },
+                    onClick = { onGroup(g); open = false },
+                )
+            }
+            HorizontalDivider()
+            Text("Ordenar hábitos por", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            com.rutina.app.data.HabitSortBy.entries.forEach { o ->
+                DropdownMenuItem(
+                    text = { Text(o.label) },
+                    leadingIcon = { if (o == sortBy) Icon(Icons.Filled.Check, null) else Spacer(Modifier.size(24.dp)) },
+                    onClick = { onSort(o); open = false },
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text("Reordenar hábitos…") }, onClick = { open = false; onReorder() })
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun HabitReorderSheet(habits: List<com.rutina.app.data.Habit>, onDismiss: () -> Unit, onSave: (List<com.rutina.app.data.Habit>) -> Unit) {
+    val items = remember(habits) { mutableStateListOf<com.rutina.app.data.Habit>().apply { addAll(habits) } }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Reordenar hábitos", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onSave(items.toList()) }) { Text("Guardar") }
+            }
+            Text("Usa las flechas. Al guardar, el orden pasa a \"Manual\".", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LazyColumn(Modifier.heightIn(max = 480.dp).padding(top = 8.dp)) {
+                itemsIndexed(items, key = { _, h -> h.id }) { i, h ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainer).padding(start = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(h.color)).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Text(h.name, color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { if (i > 0) { val x = items.removeAt(i); items.add(i - 1, x) } }, enabled = i > 0) {
+                            Icon(Icons.Filled.KeyboardArrowUp, "Subir")
+                        }
+                        IconButton(onClick = { if (i < items.lastIndex) { val x = items.removeAt(i); items.add(i + 1, x) } }, enabled = i < items.lastIndex) {
+                            Icon(Icons.Filled.KeyboardArrowDown, "Bajar")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

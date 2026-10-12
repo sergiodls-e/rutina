@@ -125,12 +125,18 @@ fun SettingsScreen(
     var revealPw by remember { mutableStateOf(false) }
     var askRemovePw by remember { mutableStateOf(false) }
     var pendingDays by remember { mutableStateOf(0) }
+    fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+    var offerDrive by remember { mutableStateOf<android.net.Uri?>(null) }
+    val askNotif = com.rutina.app.ui.common.rememberNotificationPermission()
+    fun openDrive(uri: android.net.Uri) {
+        runCatching { ctx.startActivity(AutoBackup.shareIntent(ctx, uri)) }
+            .onFailure { toast("No encontré Google Drive ni otra app para guardar el archivo.") }
+    }
     val hasPw by prefs.hasBackupPassword.collectAsState()
     val autoDays by prefs.autoBackupDays.collectAsState()
     val folder by prefs.autoBackupFolder.collectAsState()
     val smartInput by prefs.smartInput.collectAsState()
     val folderName = remember(folder) { AutoBackup.folderName(ctx, folder) }
-    fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
 
     val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) vm.exportTo(ctx.contentResolver, uri, exportPassword) { err ->
@@ -141,7 +147,7 @@ fun SettingsScreen(
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             vm.setFolder(ctx, uri)
-            if (pendingDays > 0) vm.setAutoDays(ctx, pendingDays)
+            if (pendingDays > 0) { vm.setAutoDays(ctx, pendingDays); askNotif() }
         }
         pendingDays = 0
     }
@@ -256,7 +262,7 @@ fun SettingsScreen(
                             d == 0 -> vm.setAutoDays(ctx, 0)
                             !hasPw -> { pendingDays = d; askPassword = true; toast("Primero establece tu contraseña de respaldo") }
                             folder == null -> { pendingDays = d; pickFolder.launch(null) }
-                            else -> vm.setAutoDays(ctx, d)
+                            else -> { vm.setAutoDays(ctx, d); askNotif() }
                         }
                     }
                 }
@@ -270,7 +276,14 @@ fun SettingsScreen(
                 LinkRow(
                     "Respaldar ahora",
                     "Guarda uno en la carpeta (se conservan los últimos 5)",
-                    { vm.backupNow(ctx) { r -> AutoBackup.notify(ctx, r); toast(if (r is AutoBackup.Outcome.Ok) "Respaldo guardado ✓" else (r as AutoBackup.Outcome.Failed).message) } },
+                    {
+                        vm.backupNow(ctx) { r ->
+                            when (r) {
+                                is AutoBackup.Outcome.Ok -> offerDrive = r.shareUri
+                                is AutoBackup.Outcome.Failed -> toast(r.message)
+                            }
+                        }
+                    },
                     icon = Icons.Filled.Backup,
                 )
             }
@@ -392,6 +405,11 @@ fun SettingsScreen(
         ExportDialog(
             hasSaved = hasPw,
             onDismiss = { askExport = false },
+            onDrive = { typed, useSaved ->
+                askExport = false
+                val pw = if (useSaved) prefs.backupPassword() else typed
+                vm.shareBackup(ctx, pw) { uri -> if (uri == null) toast("No se pudo preparar el respaldo.") else openDrive(uri) }
+            },
             onConfirm = { typed, useSaved ->
                 askExport = false
                 val pw = if (useSaved) prefs.backupPassword() else typed
@@ -409,6 +427,16 @@ fun SettingsScreen(
                 askDelete = false
                 vm.deleteData(kinds) { toast("Datos eliminados") }
             },
+        )
+    }
+
+    offerDrive?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { offerDrive = null },
+            title = { Text("Respaldo guardado ✓") },
+            text = { Text("Quedó en tu carpeta de respaldos. ¿Quieres subir una copia a Google Drive ahora?") },
+            confirmButton = { TextButton(onClick = { offerDrive = null; openDrive(uri) }) { Text("Subir a Drive") } },
+            dismissButton = { TextButton(onClick = { offerDrive = null }) { Text("Ahora no") } },
         )
     }
 
@@ -584,7 +612,12 @@ private fun PasswordDialog(changing: Boolean, onDismiss: () -> Unit, onSave: (St
 }
 
 @Composable
-private fun ExportDialog(hasSaved: Boolean, onDismiss: () -> Unit, onConfirm: (String?, Boolean) -> Unit) {
+private fun ExportDialog(
+    hasSaved: Boolean,
+    onDismiss: () -> Unit,
+    onDrive: (String?, Boolean) -> Unit,
+    onConfirm: (String?, Boolean) -> Unit,
+) {
     var useSaved by remember { mutableStateOf(hasSaved) }
     var protect by remember { mutableStateOf(false) }
     var pw by remember { mutableStateOf("") }
@@ -596,8 +629,8 @@ private fun ExportDialog(hasSaved: Boolean, onDismiss: () -> Unit, onConfirm: (S
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Se guarda un archivo con todos tus hábitos, registros, tareas, notas y ajustes. " +
-                        "En la siguiente pantalla puedes elegir Google Drive o una carpeta del teléfono.",
+                    "Se crea un archivo con todos tus hábitos, registros, tareas, notas y ajustes. " +
+                        "\"Subir a Drive\" abre Google Drive con el archivo listo; \"Guardar en una carpeta\" lo deja en el teléfono.",
                     fontSize = 14.sp,
                 )
                 if (hasSaved) Row(verticalAlignment = Alignment.CenterVertically) {
@@ -628,9 +661,12 @@ private fun ExportDialog(hasSaved: Boolean, onDismiss: () -> Unit, onConfirm: (S
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(if (!useSaved && protect) pw else null, useSaved) }, enabled = valid) { Text("Elegir dónde guardar") }
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = { onDrive(if (!useSaved && protect) pw else null, useSaved) }, enabled = valid) { Text("Subir a Drive") }
+                TextButton(onClick = { onConfirm(if (!useSaved && protect) pw else null, useSaved) }, enabled = valid) { Text("Guardar en una carpeta") }
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
     )
 }
 

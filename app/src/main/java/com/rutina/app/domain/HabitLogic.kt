@@ -29,6 +29,7 @@ object HabitLogic {
             GoalPeriod.DAY -> date to date.plusDays(1)
             GoalPeriod.WEEK -> weekStartOf(date, weekStart).let { it to it.plusWeeks(1) }
             GoalPeriod.MONTH -> date.withDayOfMonth(1).let { it to it.plusMonths(1) }
+            GoalPeriod.YEAR -> date.withDayOfYear(1).let { it to it.plusYears(1) }
         }
 
     fun isScheduled(habit: Habit, date: LocalDate): Boolean = when (habit.scheduleType) {
@@ -145,18 +146,36 @@ object HabitLogic {
 
     /** Texto de progreso: "2 / 3 veces", "2 veces" sin meta, con "por semana/mes" si aplica. */
     fun progressLabel(h: com.rutina.app.data.Habit, progress: Double): String {
-        val base = if (h.goalType == com.rutina.app.data.GoalType.NONE) amountLabel(progress, h.unit)
-        else "${formatNumber(progress)} / ${amountLabel(h.target, h.unit)}"
+        val base = if (h.goalType == com.rutina.app.data.GoalType.NONE) amountLabel(progress, h)
+        else "${formatNumber(progress)} / ${amountLabel(h.target, h)}"
         return base + when (h.period) {
             com.rutina.app.data.GoalPeriod.DAY -> ""
             com.rutina.app.data.GoalPeriod.WEEK -> " · sem"
             com.rutina.app.data.GoalPeriod.MONTH -> " · mes"
+            com.rutina.app.data.GoalPeriod.YEAR -> " · año"
         }
     }
 
     /** "1 vez", "3 veces", "35 min". */
-    fun amountLabel(value: Double, unit: String): String =
-        "${formatNumber(value)} ${if (unit == "vez" && value != 1.0) "veces" else unit}"
+    /** Con la unidad del hábito, usando su plural propio si lo tiene ("1 página", "3 páginas"). */
+    fun amountLabel(value: Double, h: com.rutina.app.data.Habit): String =
+        if (h.unitPlural.isNotBlank()) "${formatNumber(value)} ${if (value == 1.0) h.unit else h.unitPlural}"
+        else amountLabel(value, h.unit)
+
+    /** Momento contra el que cuenta un hábito de Dejar (si está en pausa, se congela). */
+    fun quitNow(h: com.rutina.app.data.Habit, now: Long = System.currentTimeMillis()): Long = h.pausedAt ?: now
+
+    private val singular = mapOf(
+        "horas" to "hora", "páginas" to "página", "tazas" to "taza", "vasos" to "vaso", "pasos" to "paso",
+        "porciones" to "porción", "cigarros" to "cigarro", "bebidas" to "bebida", "pisos" to "piso",
+        "calorías" to "caloría", "palabras" to "palabra",
+    )
+
+    fun amountLabel(value: Double, unit: String): String = "${formatNumber(value)} " + when {
+        unit == "vez" && value != 1.0 -> "veces"
+        value == 1.0 -> singular[unit] ?: unit
+        else -> unit
+    }
 
     fun formatNumber(v: Double): String =
         if (v == Math.floor(v)) v.toLong().toString() else String.format("%.1f", v)

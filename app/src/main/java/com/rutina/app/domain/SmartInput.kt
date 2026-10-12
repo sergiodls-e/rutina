@@ -76,11 +76,11 @@ object SmartInput {
     private val reEveryN = rx("(?:cada|todos los|todas las)\\s+(\\d{1,3})\\s+(d[ií]as|semanas|meses|a[ñn]os)")
     private val reEveryWeekday = rx("(?:cada|todos los|todas las)\\s+(?:$WD)(?:\\s*(?:,|y|e)\\s*(?:$WD))*")
     private val reWeekdayWord = Regex("$B0($WD)$B1", RegexOption.IGNORE_CASE)
-    private val reDaily = rx("todos los d[ií]as|cada d[ií]a|diariamente|diario")
+    private val reDaily = rx("todos los d[ií]as|cada d[ií]a|diariamente")
     private val reWeekdays = rx("entre semana|de lunes a viernes|d[ií]as laborables")
-    private val reWeekly = rx("cada semana|todas las semanas|semanalmente|semanal")
-    private val reMonthly = rx("cada mes|todos los meses|mensualmente|mensual")
-    private val reYearly = rx("cada a[ñn]o|todos los a[ñn]os|anualmente|anual")
+    private val reWeekly = rx("cada semana|todas las semanas|semanalmente")
+    private val reMonthly = rx("cada mes|todos los meses|mensualmente")
+    private val reYearly = rx("cada a[ñn]o|todos los a[ñn]os|anualmente")
 
     private val reNoon = rx("(?:al |a )?medio ?d[ií]a")
     private val reTime = rx(
@@ -90,12 +90,14 @@ object SmartInput {
 
     private val reAfterTomorrow = rx("pasado ma[ñn]ana")
     private val reToday = rx("hoy")
-    private val reTomorrow = rx("ma[ñn]ana")
+    // "en la mañana" es momento del día, no fecha.
+    private val reTomorrow = rx("(?<!la )ma[ñn]ana")
     private val reIn = rx("en\\s+(\\d{1,3})\\s+(d[ií]as|semanas|meses)")
     private val reNextWeek = rx("(?:la )?(?:pr[oó]xima semana|semana que viene)")
     private val reWeekday = rx("(?:(?:el|este|esta|para el)\\s+)?(?:pr[oó]ximo\\s+)?($WD)(?:\\s+que viene)?")
     private val reDateWords = rx("(?:(?:el|para el)\\s+)?(\\d{1,2})\\s+(?:de\\s+)?($MONTHS)\\.?(?:\\s+(?:de\\s+)?(\\d{4}))?")
-    private val reDateSlash = rx("(?:(?:el|para el)\\s+)?(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?")
+    // "1/2 kilo" no es fecha: se pide "el 15/9" o el año.
+    private val reDateSlash = rx("(?:(el|para el)\\s+)?(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?")
     private val rePriority = Regex("(?<!\\S)(?:!(alta|media|baja|1|2|3)|prioridad (alta|media|baja))(?!\\S)", RegexOption.IGNORE_CASE)
 
     fun parse(text: String, today: LocalDate = LocalDate.now()): Parsed {
@@ -168,9 +170,9 @@ object SmartInput {
         if (day == null) find(reDateWords)?.let { m ->
             day = dateOf(m.groupValues[1].toInt(), month(m.groupValues[2]), m.groupValues[3].toIntOrNull(), today)
         }
-        if (day == null) find(reDateSlash)?.let { m ->
-            val y = m.groupValues[3].toIntOrNull()?.let { if (it < 100) 2000 + it else it }
-            day = dateOf(m.groupValues[1].toInt(), m.groupValues[2].toInt(), y, today)
+        if (day == null) find(reDateSlash) { m -> m.groupValues[1].isNotEmpty() || m.groupValues[4].isNotEmpty() }?.let { m ->
+            val y = m.groupValues[4].toIntOrNull()?.let { if (it < 100) 2000 + it else it }
+            day = dateOf(m.groupValues[2].toInt(), m.groupValues[3].toInt(), y, today)
         }
         if (day == null && repeat == null) find(reWeekday)?.let { m ->
             day = today.with(TemporalAdjusters.next(weekday(m.groupValues[1])))

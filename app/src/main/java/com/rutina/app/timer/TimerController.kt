@@ -389,3 +389,11 @@ class TimerController(private val app: Context, private val db: AppDatabase) {
         }
     }
 }
+
+/** Elige un hábito y, si no hay sesión en curso, aplica su temporizador preferido. */
+fun TimerController.useHabit(h: com.rutina.app.data.Habit) {
+    setHabit(h.id, h.name)
+    if (state.value.active) return
+    h.timerMode?.let { m -> runCatching { setMode(TimerMode.valueOf(m)) } }
+    h.timerMinutes?.let { min -> if (min > 0) setDuration(min * 60_000L) }
+}

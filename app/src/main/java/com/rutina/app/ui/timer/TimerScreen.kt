@@ -1,5 +1,6 @@
 package com.rutina.app.ui.timer
 
+import com.rutina.app.timer.useHabit
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -174,7 +175,7 @@ fun TimerScreen(timer: TimerController, habitsFlow: Flow<List<Habit>>, onClose: 
                 Text("Concentración", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 IconButton(onClick = { showHelp = true }) { Icon(Icons.Filled.HelpOutline, "Ayuda") }
             }
-            HabitPicker(s, habits) { h -> timer.setHabit(h?.id, h?.name) }
+            HabitPicker(s, habits) { h -> if (h != null) timer.useHabit(h) else timer.setHabit(null, null) }
             HorizontalDivider(Modifier.padding(16.dp), color = MaterialTheme.colorScheme.outline)
 
             when (s.mode) {

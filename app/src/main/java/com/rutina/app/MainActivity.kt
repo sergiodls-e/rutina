@@ -75,6 +75,7 @@ import com.rutina.app.ui.settings.ArchiveViewModel
 import com.rutina.app.ui.settings.SettingsScreen
 import com.rutina.app.ui.settings.SettingsViewModel
 import com.rutina.app.ui.tutorial.TutorialScreen
+import com.rutina.app.timer.useHabit
 
 class MainActivity : ComponentActivity() {
 
@@ -140,7 +141,12 @@ class MainActivity : ComponentActivity() {
                             onOpenTimer = { nav.navigate("timer") { launchSingleTop = true } },
                             onOpenStats = { nav.navigate("stats") },
                             onHabitStats = { id -> nav.navigate("habit/stats/$id") },
+                            onOpenReports = { nav.navigate("reports") },
                         )
+                    }
+                    composable("reports") {
+                        val vm: com.rutina.app.ui.stats.ReportsViewModel = viewModel { com.rutina.app.ui.stats.ReportsViewModel(db, app.prefs) }
+                        com.rutina.app.ui.stats.ReportsScreen(vm, onClose = { nav.popBackStack() })
                     }
                     composable("stats") {
                         val vm: StatsViewModel = viewModel { StatsViewModel(db) }
@@ -155,6 +161,7 @@ class MainActivity : ComponentActivity() {
                         HabitStatsScreen(
                             vm, onClose = { nav.popBackStack() },
                             onEdit = { hid -> nav.navigate("habit/form?id=$hid") },
+                            onTimer = { h -> app.timer.useHabit(h); nav.navigate("timer") { launchSingleTop = true } },
                         )
                     }
                     composable(
@@ -282,6 +289,7 @@ private fun MainTabs(
     onOpenTimer: () -> Unit,
     onOpenStats: () -> Unit,
     onHabitStats: (Long) -> Unit,
+    onOpenReports: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableTabState(startTab) }
     Scaffold(
@@ -310,6 +318,7 @@ private fun MainTabs(
                     onOpenTimer = onOpenTimer,
                     onOpenStats = onOpenStats,
                     onHabitStats = onHabitStats,
+                    onOpenReports = onOpenReports,
                 )
                 Tab.JOURNAL -> JournalScreen(
                     journalVm,

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.TextStyle
@@ -116,7 +117,45 @@ data class HabitDetail(
     val chart: List<ChartPoint> = emptyList(),
 )
 
-class HabitStatsViewModel(db: AppDatabase, habitId: Long) : ViewModel() {
+class HabitStatsViewModel(private val db: AppDatabase, habitId: Long) : ViewModel() {
+
+    // ------------------------------------------------------------ registro de actividad
+
+    /** Corrige un registro (valor, fecha/hora o nota). */
+    fun saveLog(h: Habit, old: HabitLog?, updated: HabitLog) = viewModelScope.launch {
+        if (old == null) db.habits().insertLog(updated) else db.habits().updateLog(updated)
+        if (h.type == TrackingType.QUIT) syncQuit(h, old?.timestamp)
+    }
+
+    fun deleteLog(h: Habit, l: HabitLog) = viewModelScope.launch {
+        db.habits().deleteLog(l)
+        if (h.type == TrackingType.QUIT) syncQuit(h, l.timestamp)
+    }
+
+    /** En Dejar, el contador cuenta desde la recaída más reciente. */
+    private suspend fun syncQuit(h: Habit, changed: Long?) {
+        val fresh = db.habits().get(h.id) ?: return
+        val last = db.habits().lastLogTime(h.id)
+        val since = fresh.quitSince
+        val newSince = when {
+            last != null && (since == null || last >= since || since == changed) -> last
+            last == null && since == changed -> fresh.createdAt
+            else -> since
+        }
+        if (newSince != since) db.habits().update(fresh.copy(quitSince = newSince))
+    }
+
+    /** Pausar / reanudar un hábito de Dejar: al reanudar, el tiempo en pausa no cuenta. */
+    fun togglePause(h: Habit) = viewModelScope.launch {
+        val fresh = db.habits().get(h.id) ?: return@launch
+        val now = System.currentTimeMillis()
+        val p = fresh.pausedAt
+        db.habits().update(
+            if (p == null) fresh.copy(pausedAt = now)
+            else fresh.copy(pausedAt = null, quitSince = (fresh.quitSince ?: fresh.createdAt) + (now - p))
+        )
+    }
+
 
     val state: StateFlow<HabitDetail> = combine(
         db.habits().observe(habitId),

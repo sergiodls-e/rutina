@@ -1,5 +1,8 @@
 package com.rutina.app.ui.habit
 
+import kotlinx.coroutines.flow.stateIn
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.filled.Flag
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.text.BasicTextField
@@ -105,6 +108,9 @@ class HabitEditorViewModel(
     private val editId: Long,
     preset: Suggestion?,
 ) : ViewModel() {
+
+    val lists: kotlinx.coroutines.flow.StateFlow<List<com.rutina.app.data.TaskList>> = db.tasks().observeLists()
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _habit = MutableStateFlow(
         preset?.let {
@@ -252,6 +258,8 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
     var pickQuitDate by remember { mutableStateOf(false) }
     var pickQuitTime by remember { mutableStateOf<java.time.LocalDate?>(null) }
     val logCount by vm.logCount.collectAsStateWithLifecycle()
+    val lists by vm.lists.collectAsStateWithLifecycle()
+    var customUnit by remember { mutableStateOf(false) }
     val color = Color(h.color)
 
     Scaffold(
@@ -360,15 +368,48 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                             }
                             Spacer(Modifier.width(12.dp))
                             if (h.type == TrackingType.JOURNAL || h.type == TrackingType.HEALTH) Text(h.unit, fontSize = 18.sp)
-                            else Dropdown(h.unit, Suggestions.units.map { it to it }) { u -> vm.update { it.copy(unit = u) } }
+                            else Dropdown(
+                                if (h.unitPlural.isNotBlank()) h.unitPlural else h.unit,
+                                Suggestions.units.map { it to it } + listOf("Unidad propia…" to ""),
+                            ) { u -> if (u.isEmpty()) customUnit = true else vm.update { it.copy(unit = u, unitPlural = "") } }
                         }
                         Spacer(Modifier.height(8.dp))
                         Text("por", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(8.dp))
                         Dropdown(
-                            when (h.period) { GoalPeriod.DAY -> "Día"; GoalPeriod.WEEK -> "Semana"; GoalPeriod.MONTH -> "Mes" },
-                            listOf("Día" to GoalPeriod.DAY, "Semana" to GoalPeriod.WEEK, "Mes" to GoalPeriod.MONTH),
-                        ) { p -> vm.update { it.copy(period = p) } }
+                            when (h.period) { GoalPeriod.DAY -> "Día"; GoalPeriod.WEEK -> "Semana"; GoalPeriod.MONTH -> "Mes"; GoalPeriod.YEAR -> "Año" },
+                            listOf("Día" to GoalPeriod.DAY, "Semana" to GoalPeriod.WEEK, "Mes" to GoalPeriod.MONTH, "Año" to GoalPeriod.YEAR),
+                        ) { p -> vm.update { it.copy(period = p, scheduleType = if (p != GoalPeriod.DAY && it.scheduleType == ScheduleType.DAYS_PER_WEEK) ScheduleType.ALL_DAYS else it.scheduleType) } }
+                    }
+                }
+                if (h.type == TrackingType.COUNT) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    FormRow("El botón + suma") {
+                        var stepText by remember(h.id) { mutableStateOf(HabitLogic.formatNumber(h.step)) }
+                        OutlinedTextField(
+                            stepText,
+                            { v -> stepText = v; v.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.let { d -> vm.update { it.copy(step = d) } } },
+                            suffix = { Text(if (h.unitPlural.isNotBlank()) h.unitPlural else h.unit) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.width(150.dp),
+                        )
+                    }
+                    if (h.unit == "min" || h.unit == "horas") {
+                        FormRow("Temporizador") {
+                            Dropdown(
+                                when (h.timerMode) { "STOPWATCH" -> "Cronómetro"; "COUNTDOWN" -> "Cuenta atrás"; else -> "El último usado" },
+                                listOf("El último usado" to "", "Cronómetro" to "STOPWATCH", "Cuenta atrás" to "COUNTDOWN"),
+                            ) { m -> vm.update { it.copy(timerMode = m.ifEmpty { null }, timerMinutes = if (m == "COUNTDOWN") it.timerMinutes ?: 25 else null) } }
+                        }
+                        if (h.timerMode == "COUNTDOWN") {
+                            FormRow("Duración") {
+                                Dropdown(
+                                    "${h.timerMinutes ?: 25} min",
+                                    listOf(5, 10, 15, 20, 25, 30, 45, 60, 90, 120).map { "$it min" to it },
+                                ) { m -> vm.update { it.copy(timerMinutes = m) } }
+                            }
+                        }
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
@@ -455,6 +496,27 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                 )
             }
 
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            FormRow("Lista") {
+                Dropdown(
+                    current = lists.firstOrNull { it.id == h.listId }?.name ?: "Ninguna",
+                    options = listOf<Pair<String, Long?>>("Ninguna" to null) + lists.map { it.name to it.id },
+                ) { id -> vm.update { it.copy(listId = id) } }
+            }
+            FormRow("Prioridad") {
+                Row {
+                    (0..3).forEach { p ->
+                        IconButton(onClick = { vm.update { it.copy(priority = p) } }) {
+                            Icon(
+                                if (h.priority == p) Icons.Filled.Flag else Icons.Outlined.Flag,
+                                com.rutina.app.domain.TaskLogic.priorityLabel(p), tint = com.rutina.app.ui.tasks.PriorityColors[p],
+                                modifier = Modifier.size(if (h.priority == p) 28.dp else 22.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
             RemindersSection(vm, color)
 
             if (vm.isEdit) {
@@ -482,7 +544,10 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                                 .border(2.dp, if (sel) color else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
                                 .clickable(enabled = t.ready) {
-                                    vm.update {
+                                    vm.update { cur ->
+                                        // Lo propio de Recuento (plural, incremento, temporizador) no aplica a otros tipos.
+                                        val it = if (t.type == TrackingType.COUNT) cur
+                                        else cur.copy(unitPlural = "", step = 1.0, timerMode = null, timerMinutes = null)
                                         val wasJournal = it.type != TrackingType.COUNT
                                         when (t.type) {
                                             TrackingType.MOOD -> it.copy(
@@ -592,6 +657,28 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                 }) { Text("Aceptar") }
             },
             dismissButton = { TextButton(onClick = { pickQuitTime = null }) { Text("Cancelar") } },
+        )
+    }
+
+    if (customUnit) {
+        var one by remember { mutableStateOf(if (h.unitPlural.isNotBlank()) h.unit else "") }
+        var many by remember { mutableStateOf(h.unitPlural) }
+        AlertDialog(
+            onDismissRequest = { customUnit = false },
+            title = { Text("Unidad propia") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(one, { one = it }, label = { Text("Singular (1 …)") }, placeholder = { Text("capítulo") }, singleLine = true)
+                    OutlinedTextField(many, { many = it }, label = { Text("Plural (2 …)") }, placeholder = { Text("capítulos") }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = one.isNotBlank(), onClick = {
+                    vm.update { it.copy(unit = one.trim(), unitPlural = many.trim().ifBlank { one.trim() }) }
+                    customUnit = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = { TextButton(onClick = { customUnit = false }) { Text("Cancelar") } },
         )
     }
 

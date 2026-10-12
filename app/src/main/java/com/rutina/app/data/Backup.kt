@@ -81,6 +81,9 @@ object Backup {
             put("scheduleDays", h.scheduleDays); put("daysPerWeek", h.daysPerWeek)
             putNullable("quitSince", h.quitSince); put("archived", h.archived)
             put("sortOrder", h.sortOrder); put("createdAt", h.createdAt)
+            putNullable("listId", h.listId); put("priority", h.priority); put("unitPlural", h.unitPlural)
+            put("step", h.step); putNullable("pausedAt", h.pausedAt); putNullable("timerMode", h.timerMode)
+            putNullable("timerMinutes", h.timerMinutes)
         })
         put("habitLogs", arr(d.habitLogs) { l ->
             put("id", l.id); put("habitId", l.habitId); put("timestamp", l.timestamp)
@@ -140,6 +143,10 @@ object Backup {
                         scheduleDays = j.optInt("scheduleDays", 0b1111111), daysPerWeek = j.optInt("daysPerWeek", 7),
                         quitSince = j.longOrNull("quitSince"), archived = j.optBoolean("archived", false),
                         sortOrder = j.optInt("sortOrder", 0), createdAt = j.optLong("createdAt", System.currentTimeMillis()),
+                        listId = j.longOrNull("listId"), priority = j.optInt("priority", 0),
+                        unitPlural = j.optString("unitPlural", ""), step = j.optDouble("step", 1.0).takeIf { it > 0 } ?: 1.0,
+                        pausedAt = j.longOrNull("pausedAt"), timerMode = j.stringOrNull("timerMode"),
+                        timerMinutes = j.longOrNull("timerMinutes")?.toInt(),
                     )
                 },
                 habitLogs = list(o, "habitLogs") { j ->

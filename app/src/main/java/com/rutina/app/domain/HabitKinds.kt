@@ -83,7 +83,7 @@ object Weight {
 fun valueLabel(h: Habit, value: Double): String = when (h.type) {
     TrackingType.MOOD -> Mood.label(value)
     TrackingType.WEIGHT -> "${Weight.format(value)} ${h.unit}"
-    else -> HabitLogic.amountLabel(value, h.unit)
+    else -> HabitLogic.amountLabel(value, h)
 }
 
 /** ¿Hay algún registro ese día? */
@@ -91,7 +91,8 @@ fun loggedOn(logs: List<HabitLog>, date: LocalDate): Boolean = logs.any { HabitL
 
 /** Texto corto del estado de un hábito en un día (tarjetas, widget, avisos). */
 fun todayLabel(h: Habit, logs: List<HabitLog>, date: LocalDate, weekStart: DayOfWeek): String = when (h.type) {
-    TrackingType.QUIT -> "${HabitLogic.formatShort(System.currentTimeMillis() - (h.quitSince ?: h.createdAt))} sin recaer"
+    TrackingType.QUIT -> "${HabitLogic.formatShort(HabitLogic.quitNow(h) - (h.quitSince ?: h.createdAt))} " +
+        if (h.pausedAt != null) "· en pausa" else "sin recaer"
     TrackingType.MOOD -> logs.filter { HabitLogic.dateOf(it.timestamp) == date }.maxByOrNull { it.timestamp }
         ?.let { Mood.label(it.value) } ?: "¿Cómo te sientes?"
     TrackingType.WEIGHT -> {

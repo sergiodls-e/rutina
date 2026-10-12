@@ -1,5 +1,8 @@
 package com.rutina.app.ui.stats
 
+import com.rutina.app.data.HabitLog
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -170,13 +173,16 @@ private fun HabitOverviewRow(o: HabitOverview, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long) -> Unit) {
+fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long) -> Unit, onTimer: (Habit) -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     val h = s.habit
     if (s.loaded && h == null) { LaunchedEffect(Unit) { onClose() }; return }
     val color = h?.let { Color(it.color) } ?: Accent
     var month by remember { mutableStateOf(YearMonth.now()) }
     val today = LocalDate.now()
+    var editing by remember { mutableStateOf<HabitLog?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    var showAll by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -184,6 +190,9 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
                 navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = Color.Black) } },
                 title = { Text(h?.name ?: "", fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
+                    if (h != null && h.type == TrackingType.COUNT) {
+                        IconButton(onClick = { onTimer(h) }) { Icon(Icons.Filled.Timer, "Temporizador", tint = Color.Black) }
+                    }
                     if (h != null) IconButton(onClick = { onEdit(h.id) }) { Icon(Icons.Filled.Edit, "Editar hábito", tint = Color.Black) }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = color),
@@ -195,7 +204,7 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (h.type == TrackingType.QUIT && s.quit != null) QuitHeader(h, s.quit!!)
+            if (h.type == TrackingType.QUIT && s.quit != null) QuitHeader(h, s.quit!!, onTogglePause = { vm.togglePause(h) })
             if (h.type == TrackingType.MOOD) MoodStats(h, s)
             if (h.type == TrackingType.WEIGHT) WeightStats(h, s, color)
             s.summary?.takeIf { h.type != TrackingType.MOOD && h.type != TrackingType.WEIGHT }?.let { sm ->
@@ -206,7 +215,7 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Tile("Cumplimiento", pct(sm.recentRate), sm.recentLabel, Modifier.weight(1f))
                     Tile(
-                        "Total", HabitLogic.amountLabel(sm.total, h.unit), "${sm.activeDays} días con registro",
+                        "Total", HabitLogic.amountLabel(sm.total, h), "${sm.activeDays} días con registro",
                         Modifier.weight(1f),
                     )
                 }
@@ -237,7 +246,7 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
                     BarChart(
                         s.chart, color,
                         target = h.target.takeIf { h.goalType != GoalType.NONE && h.type != TrackingType.MOOD },
-                        valueLabel = { if (h.type == TrackingType.MOOD) (if (it > 0) Mood.label(it) else "Sin registro") else HabitLogic.amountLabel(it, h.unit) },
+                        valueLabel = { if (h.type == TrackingType.MOOD) (if (it > 0) Mood.label(it) else "Sin registro") else HabitLogic.amountLabel(it, h) },
                     )
                 }
             }
@@ -246,8 +255,20 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
                 YearHeatmap(today, StatsWeekStart, color, cellFor = { d -> HabitStats.cell(h, d, s.totals, s.resets, today) })
             }
 
-            Section(if (h.type == TrackingType.QUIT) "Recaídas" else "Historial") {
-                val items = if (h.type == TrackingType.JOURNAL) s.logs.take(30) else s.logs.take(30)
+            Section(if (h.type == TrackingType.QUIT) "Recaídas" else "Registro de actividad") {
+                val items = if (showAll) s.logs else s.logs.take(30)
+                if (logEditable(h)) {
+                    Text(
+                        if (h.type == TrackingType.QUIT) "Toca una recaída para corregir su fecha o nota."
+                        else "Toca un registro para corregirlo o eliminarlo.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (valueEditable(h) || h.type == TrackingType.QUIT) {
+                    TextButton(onClick = { adding = true }) {
+                        Text(if (h.type == TrackingType.QUIT) "+ Añadir recaída de otra fecha" else "+ Añadir registro de otro día")
+                    }
+                }
                 if (items.isEmpty()) {
                     Text(
                         if (h.type == TrackingType.QUIT) "Sin recaídas. ¡Sigue así!" else "Aún no hay registros.",
@@ -255,29 +276,53 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
                     )
                 }
                 items.forEach { l ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .then(if (logEditable(h)) Modifier.clickable { editing = l } else Modifier)
+                            .padding(vertical = 6.dp),
+                    ) {
                         Text(stampLabel(l.timestamp), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                         Text(logLabel(h, l), fontSize = 14.sp)
                     }
                     l.userNote()?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
                 }
+                if (!showAll && s.logs.size > 30) TextButton(onClick = { showAll = true }) { Text("Ver todos (${s.logs.size})") }
             }
             Spacer(Modifier.height(24.dp))
         }
     }
+
+    if (h != null && (editing != null || adding)) {
+        LogEditDialog(
+            habit = h,
+            log = editing,
+            onDismiss = { editing = null; adding = false },
+            onSave = { updated -> vm.saveLog(h, editing, updated); editing = null; adding = false },
+            onDelete = editing?.let { l -> { vm.deleteLog(h, l); editing = null } },
+        )
+    }
 }
 
 @Composable
-private fun QuitHeader(h: Habit, q: com.rutina.app.domain.QuitSummary) {
+private fun QuitHeader(h: Habit, q: com.rutina.app.domain.QuitSummary, onTogglePause: () -> Unit) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(h.id) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
-    val current = now - (h.quitSince ?: h.createdAt)
+    val current = HabitLogic.quitNow(h, now) - (h.quitSince ?: h.createdAt)
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Tiempo sin recaer", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (h.pausedAt != null) "En pausa" else "Tiempo sin recaer", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(HabitLogic.formatElapsed(current), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        TextButton(onClick = onTogglePause) {
+            Text(if (h.pausedAt != null) "▶  Reanudar contador" else "❚❚  Pausar contador")
+        }
+        if (h.pausedAt == null) {
+            Text(
+                "Pausa si tu situación cambia (viaje, tratamiento…): el tiempo en pausa no cuenta ni rompe tu racha.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+            )
+        }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Tile("Mejor racha", HabitLogic.formatShort(maxOf(q.bestMs, current)), "sin recaer", Modifier.weight(1f))

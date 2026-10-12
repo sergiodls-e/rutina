@@ -83,12 +83,13 @@ fun autoBackupLabel(days: Int) = AutoBackupOptions.firstOrNull { it.first == day
 object AutoBackup {
     private const val WORK = "auto_backup"
     private const val WORK_NOW = "auto_backup_now"
-    private const val CHANNEL = "backup"
+    private const val CHANNEL = "backup_v2"
     private const val KEEP = 5
     const val DRIVE = "com.google.android.apps.docs"
 
     sealed interface Outcome {
-        data class Ok(val uri: Uri, val name: String) : Outcome
+        /** [shareUri]: copia temporal que se puede mandar a Drive. */
+        data class Ok(val uri: Uri, val name: String, val shareUri: Uri) : Outcome
         data class Failed(val message: String) : Outcome
     }
 
@@ -151,7 +152,7 @@ object AutoBackup {
             ctx.contentResolver.openOutputStream(doc)?.use { it.write(text.toByteArray(Charsets.UTF_8)) } ?: error("sin acceso")
             prune(ctx, tree)
             prefs.markBackup()
-            Outcome.Ok(doc, name)
+            Outcome.Ok(doc, name, shareCopy(ctx, text, name))
         }.getOrElse { Outcome.Failed("No se pudo guardar el respaldo automático.") }
     }
 
@@ -173,12 +174,24 @@ object AutoBackup {
         }
     }
 
+    /**
+     * Guarda una copia temporal en la caché privada y devuelve un enlace (FileProvider) para compartirla.
+     * Solo la app que elijas (Drive) puede leerla, y solo cuando tú la mandas.
+     */
+    fun shareCopy(ctx: Context, text: String, name: String): Uri {
+        val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val f = java.io.File(dir, name)
+        f.writeText(text, Charsets.UTF_8)
+        return androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+    }
+
     // ------------------------------------------------------------ avisos
 
     private fun channel(ctx: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             ctx.getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL, "Respaldos", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL, "Respaldos", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(null, null) }
             )
         }
     }
@@ -194,8 +207,9 @@ object AutoBackup {
             clipData = ClipData.newRawUri("respaldo", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        val hasDrive = runCatching { ctx.packageManager.getPackageInfo(DRIVE, 0) }.isSuccess
-        return if (hasDrive) send.setPackage(DRIVE) else Intent.createChooser(send, "Guardar respaldo en…").apply {
+        val drive = Intent(send).setPackage(DRIVE)
+        val hasDrive = ctx.packageManager.queryIntentActivities(drive, 0).isNotEmpty()
+        return if (hasDrive) drive else Intent.createChooser(send, "Guardar respaldo en…").apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }
@@ -204,15 +218,15 @@ object AutoBackup {
         if (!canNotify(ctx)) return
         channel(ctx)
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        val b = NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(R.drawable.ic_stat_check).setAutoCancel(true)
+        val b = NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(R.drawable.ic_stat_check).setAutoCancel(true).setSilent(true)
         when (outcome) {
             is Outcome.Ok -> {
                 val share = PendingIntent.getActivity(
-                    ctx, 41, shareIntent(ctx, outcome.uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    ctx, 41, shareIntent(ctx, outcome.shareUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 )
-                b.setContentTitle("Respaldo automático listo")
-                    .setContentText(outcome.name)
+                b.setContentTitle("Respaldo listo")
+                    .setContentText("Toca para subirlo a Drive · ${outcome.name}")
                     .setContentIntent(share)
                     .addAction(0, "Subir a Drive", share)
             }

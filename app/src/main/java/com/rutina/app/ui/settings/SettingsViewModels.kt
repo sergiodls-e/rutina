@@ -67,6 +67,22 @@ class SettingsViewModel(private val db: AppDatabase, val prefs: Prefs) : ViewMod
         onDone(if (error == null) null else "No se pudo guardar el respaldo.")
     }
 
+    /** Prepara el respaldo como copia temporal compartible (para mandarlo directo a Drive). */
+    fun shareBackup(ctx: android.content.Context, password: String?, onReady: (Uri?) -> Unit) = viewModelScope.launch {
+        _busy.value = true
+        val uri = withContext(Dispatchers.Default) {
+            runCatching {
+                val json = Backup.toJson(Backup.collect(db, prefs))
+                val text = if (password.isNullOrEmpty()) json else Backup.encrypt(json, password)
+                val name = "rutina-respaldo-${java.time.LocalDate.now()}${if (password.isNullOrEmpty()) "" else "-cifrado"}.json"
+                withContext(Dispatchers.IO) { com.rutina.app.backup.AutoBackup.shareCopy(ctx.applicationContext, text, name) }
+            }.getOrNull()
+        }
+        _busy.value = false
+        if (uri != null) prefs.markBackup()
+        onReady(uri)
+    }
+
     fun readBackup(resolver: ContentResolver, uri: Uri) = viewModelScope.launch {
         _restore.value = RestoreStep.Working
         _restore.value = withContext(Dispatchers.IO) {

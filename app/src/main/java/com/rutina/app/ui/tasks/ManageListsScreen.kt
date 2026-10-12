@@ -79,7 +79,7 @@ class ManageListsViewModel(private val db: AppDatabase) : ViewModel() {
     }
 
     /** Al borrar una lista, sus tareas se conservan y quedan "sin lista". */
-    fun deleteList(l: TaskList) = viewModelScope.launch { db.tasks().deleteList(l) }
+    fun deleteList(l: TaskList) = viewModelScope.launch { db.tasks().detachHabits(l.id); db.tasks().deleteList(l) }
 
     fun saveFilter(f: TaskFilter) = viewModelScope.launch {
         if (f.id == 0L) db.tasks().insertFilter(f.copy(sortOrder = filters.value.size)) else db.tasks().updateFilter(f)
@@ -147,7 +147,7 @@ fun ManageListsScreen(vm: ManageListsViewModel, onClose: () -> Unit) {
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("¿Eliminar \"$name\"?") },
-            text = { if (d is TaskList) Text("Las tareas de esta lista no se borran; quedan sin lista.") },
+            text = { if (d is TaskList) Text("Las tareas y hábitos de esta lista no se borran; quedan sin lista.") },
             confirmButton = {
                 TextButton(onClick = {
                     if (d is TaskList) vm.deleteList(d) else vm.deleteFilter(d as TaskFilter)

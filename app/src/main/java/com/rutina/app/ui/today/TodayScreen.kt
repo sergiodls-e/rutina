@@ -1,5 +1,6 @@
 package com.rutina.app.ui.today
 
+import com.rutina.app.timer.useHabit
 import androidx.compose.animation.AnimatedVisibility
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -138,6 +139,7 @@ fun TodayScreen(
     onOpenTimer: () -> Unit,
     onOpenStats: () -> Unit,
     onHabitStats: (Long) -> Unit,
+    onOpenReports: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val display by vm.display.collectAsStateWithLifecycle()
@@ -157,12 +159,14 @@ fun TodayScreen(
     var selection by remember { mutableStateOf(setOf<Long>()) }
     var expandedDone by remember { mutableStateOf(setOf<String>()) }
     var reordering by remember { mutableStateOf(false) }
+    var reorderingHabits by remember { mutableStateOf(false) }
     var pickMoveDate by remember { mutableStateOf(false) }
     val smartInput by vm.smartInput.collectAsStateWithLifecycle()
     LaunchedEffect(state.view) { selection = emptySet() }
     var moodFor by remember { mutableStateOf<HabitRow?>(null) }
     var weightFor by remember { mutableStateOf<HabitRow?>(null) }
     val health = rememberHealthConnector()
+    val appCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext as com.rutina.app.RutinaApp
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -179,6 +183,7 @@ fun TodayScreen(
                 onManage = { scope.launch { drawer.close() }; onManageLists() },
                 display = display,
                 onDisplay = { d -> vm.setDisplay(d); scope.launch { drawer.close() } },
+                onReports = { scope.launch { drawer.close() }; onOpenReports() },
             )
         },
     ) {
@@ -216,6 +221,11 @@ fun TodayScreen(
                         )
                     },
                     actions = {
+                        if (state.view == MainView.Today || state.view == MainView.AllHabits) HabitSortMenuButton(
+                            state.habitGroupBy, state.habitSortBy,
+                            onGroup = vm::setHabitGroupBy, onSort = vm::setHabitSortBy,
+                            onReorder = { reorderingHabits = true },
+                        )
                         if (state.isTaskView) SortMenuButton(
                             state.groupBy, state.sortBy,
                             onGroup = vm::setGroupBy, onSort = vm::setSortBy,
@@ -285,10 +295,15 @@ fun TodayScreen(
                         contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 120.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (state.habits.isNotEmpty()) {
-                            item { SectionHeader(if (state.view == MainView.Today) "Hábitos diarios" else "Hábitos", state.habits.size) }
-                            if (display == HabitDisplay.WEEK) item(key = "weekhead") { WeekHeader(state.date, state.weekStart) }
-                            items(state.habits, key = { "h" + it.habit.id }) { row ->
+                        if (state.habits.isNotEmpty()) state.habitSections.forEachIndexed { si, (sectionTitle, rows) ->
+                            item(key = "hs$si$sectionTitle") {
+                                SectionHeader(
+                                    sectionTitle.ifEmpty { if (state.view == MainView.Today) "Hábitos diarios" else "Hábitos" },
+                                    rows.size,
+                                )
+                            }
+                            if (si == 0 && display == HabitDisplay.WEEK) item(key = "weekhead") { WeekHeader(state.date, state.weekStart) }
+                            items(rows, key = { "h" + it.habit.id }) { row ->
                                 when (display) {
                                     HabitDisplay.COMPACT -> HabitCard(
                                         row = row,
@@ -300,7 +315,7 @@ fun TodayScreen(
                                                 TrackingType.WEIGHT -> weightFor = row
                                                 TrackingType.HEALTH ->
                                                     if (health.status == HealthStatus.READY) health.sync() else health.connect()
-                                                else -> vm.add(row.habit)
+                                                else -> vm.add(row.habit, row.habit.step)
                                             }
                                         },
                                         onLong = { actionsFor = row },
@@ -361,6 +376,14 @@ fun TodayScreen(
         )
     }
 
+    if (reorderingHabits) {
+        HabitReorderSheet(
+            habits = vm.allActiveHabits(),
+            onDismiss = { reorderingHabits = false },
+            onSave = { vm.saveHabitOrder(it); reorderingHabits = false },
+        )
+    }
+
     if (pickMoveDate) {
         val st = androidx.compose.material3.rememberDatePickerState(
             initialSelectedDateMillis = LocalDate.now().atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
@@ -405,6 +428,7 @@ fun TodayScreen(
             onMood = { actionsFor = null; moodFor = row },
             onWeight = { actionsFor = null; weightFor = row },
             onSync = { actionsFor = null; if (health.status == HealthStatus.READY) health.sync() else health.connect() },
+            onTimer = { actionsFor = null; appCtx.timer.useHabit(row.habit); onOpenTimer() },
         )
     }
 
@@ -427,6 +451,7 @@ private fun MainDrawer(
     onManage: () -> Unit,
     display: HabitDisplay,
     onDisplay: (HabitDisplay) -> Unit,
+    onReports: () -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = Color(0xFF181818), modifier = Modifier.width(300.dp)) {
         Column(Modifier.fillMaxHeight().padding(12.dp)) {
@@ -435,6 +460,7 @@ private fun MainDrawer(
                 item { DrawerItem("Vista de hoy", Icons.Filled.Today, Accent, state.todayCount, state.view == MainView.Today) { onPick(MainView.Today) } }
                 item { DrawerItem("Todas las tareas", Icons.Filled.TaskAlt, Accent, state.pendingCount, state.view == MainView.AllTasks) { onPick(MainView.AllTasks) } }
                 item { DrawerItem("Todos los hábitos", Icons.Filled.Spa, Accent, state.habitCount, state.view == MainView.AllHabits) { onPick(MainView.AllHabits) } }
+                item { DrawerItem("Informes", Icons.Filled.BarChart, Accent, null, false) { onReports() } }
                 if (state.lists.isNotEmpty()) item { DrawerLabel("Mis listas") }
                 items(state.lists, key = { "dl" + it.id }) { l ->
                     DrawerItem(l.name, com.rutina.app.ui.tasks.ListIcons.of(l.icon), Color(l.color), null, state.view == MainView.OfList(l.id)) { onPick(MainView.OfList(l.id)) }
@@ -735,6 +761,7 @@ private fun HabitActionsDialog(
     onMood: () -> Unit,
     onWeight: () -> Unit,
     onSync: () -> Unit,
+    onTimer: () -> Unit,
 ) {
     val h: Habit = row.habit
     var amount by remember { mutableStateOf("") }
@@ -784,6 +811,7 @@ private fun HabitActionsDialog(
                     TextButton(onClick = onStats) { Text("Estadísticas") }
                     TextButton(onClick = onEdit) { Text("Editar hábito") }
                 }
+                if (h.type == TrackingType.COUNT) TextButton(onClick = onTimer) { Text("⏱  Temporizador") }
             }
         },
         confirmButton = {
@@ -796,8 +824,8 @@ private fun HabitActionsDialog(
                 TrackingType.WEIGHT -> TextButton(onClick = onWeight) { Text("Registrar peso") }
                 TrackingType.HEALTH -> TextButton(onClick = onSync) { Text("Sincronizar") }
                 else ->
-                    TextButton(onClick = { onAdd(amount.toDoubleOrNull() ?: 1.0, note.trim().ifBlank { null }) }) {
-                        Text(if (amount.isBlank()) "Añadir 1" else "Añadir")
+                    TextButton(onClick = { onAdd(amount.replace(',', '.').toDoubleOrNull() ?: h.step, note.trim().ifBlank { null }) }) {
+                        Text(if (amount.isBlank()) "Añadir ${HabitLogic.formatNumber(h.step)}" else "Añadir")
                     }
             }
         },

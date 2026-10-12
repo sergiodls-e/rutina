@@ -30,6 +30,9 @@ interface HabitDao {
     @Update
     suspend fun update(habit: Habit)
 
+    @Update
+    suspend fun updateAll(habits: List<Habit>)
+
     @Delete
     suspend fun delete(habit: Habit)
 
@@ -113,6 +116,10 @@ interface TaskDao {
 
     @Delete
     suspend fun deleteList(list: TaskList)
+
+    /** Los hábitos de una lista borrada quedan sin lista. */
+    @Query("UPDATE habits SET listId = NULL WHERE listId = :listId")
+    suspend fun detachHabits(listId: Long)
 
     @Query("SELECT * FROM task_filters ORDER BY sortOrder, id")
     fun observeFilters(): Flow<List<TaskFilter>>

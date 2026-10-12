@@ -172,7 +172,7 @@ class ReminderScheduler(private val app: Context, private val db: AppDatabase) {
         }
         if (alreadyDone) return
         val text = when (h.type) {
-            TrackingType.QUIT -> "Llevas ${HabitLogic.formatShort(System.currentTimeMillis() - (h.quitSince ?: h.createdAt))} sin recaer. ¡Sigue así!"
+            TrackingType.QUIT -> "Llevas ${HabitLogic.formatShort(HabitLogic.quitNow(h) - (h.quitSince ?: h.createdAt))} sin recaer. ¡Sigue así!"
             TrackingType.JOURNAL -> "Escribe unas palabras en tu diario."
             TrackingType.MOOD -> "¿Cómo te sientes hoy? Registra tu estado de ánimo."
             TrackingType.WEIGHT -> "Es buen momento para registrar tu peso."
@@ -190,7 +190,7 @@ class ReminderScheduler(private val app: Context, private val db: AppDatabase) {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openApp(id))
-        if (h.type == TrackingType.COUNT) b.addAction(0, "+1 ${h.unit}", action(ACTION_HABIT_ADD, h.id, id))
+        if (h.type == TrackingType.COUNT) b.addAction(0, "+" + HabitLogic.amountLabel(h.step, h), action(ACTION_HABIT_ADD, h.id, id))
         try { nm.notify(id, b.build()) } catch (_: SecurityException) { }
     }
 

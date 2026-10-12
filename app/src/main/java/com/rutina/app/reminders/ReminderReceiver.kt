@@ -27,7 +27,8 @@ class ReminderReceiver : BroadcastReceiver() {
                         Widgets.refresh(app)
                     }
                     ReminderScheduler.ACTION_HABIT_ADD -> {
-                        app.db.habits().insertLog(HabitLog(habitId = id, timestamp = System.currentTimeMillis(), value = 1.0))
+                        val step = app.db.habits().get(id)?.step ?: 1.0
+                        app.db.habits().insertLog(HabitLog(habitId = id, timestamp = System.currentTimeMillis(), value = step))
                         // El id de la notificación depende del recordatorio: se cierran las de ese hábito.
                         app.db.reminders().forHabit(id).forEach {
                             app.reminders.cancelNotification(ReminderScheduler.habitNotifId(it.id))

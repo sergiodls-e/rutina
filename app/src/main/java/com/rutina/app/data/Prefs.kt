@@ -53,6 +53,21 @@ enum class TaskSortBy(val label: String) {
     MANUAL("Manual"),
 }
 
+/** Cómo se agrupan los hábitos. */
+enum class HabitGroupBy(val label: String) {
+    NONE("Sin agrupar"),
+    LIST("Lista"),
+    PRIORITY("Prioridad"),
+}
+
+/** Cómo se ordenan los hábitos. */
+enum class HabitSortBy(val label: String) {
+    MANUAL("Manual"),
+    NAME("Nombre"),
+    PRIORITY("Prioridad"),
+    STREAK("Racha"),
+}
+
 /** Días con los que puede empezar la semana. */
 val WeekStarts = listOf(DayOfWeek.SUNDAY, DayOfWeek.MONDAY, DayOfWeek.SATURDAY)
 
@@ -111,6 +126,22 @@ class Prefs(context: Context) {
 
     private val _taskSortBy = MutableStateFlow(enumPref("taskSortBy", TaskSortBy.DATE))
     val taskSortBy: StateFlow<TaskSortBy> = _taskSortBy
+
+    private val _habitGroupBy = MutableStateFlow(enumPref("habitGroupBy", HabitGroupBy.NONE))
+    val habitGroupBy: StateFlow<HabitGroupBy> = _habitGroupBy
+
+    private val _habitSortBy = MutableStateFlow(enumPref("habitSortBy", HabitSortBy.MANUAL))
+    val habitSortBy: StateFlow<HabitSortBy> = _habitSortBy
+
+    fun setHabitGroupBy(g: HabitGroupBy) {
+        sp.edit().putString("habitGroupBy", g.name).apply()
+        _habitGroupBy.value = g
+    }
+
+    fun setHabitSortBy(o: HabitSortBy) {
+        sp.edit().putString("habitSortBy", o.name).apply()
+        _habitSortBy.value = o
+    }
 
     fun setTaskGroupBy(g: TaskGroupBy) {
         sp.edit().putString("taskGroupBy", g.name).apply()
@@ -186,6 +217,8 @@ class Prefs(context: Context) {
         "smartInput" to smartInput.value.toString(),
         "taskGroupBy" to taskGroupBy.value.name,
         "taskSortBy" to taskSortBy.value.name,
+        "habitGroupBy" to habitGroupBy.value.name,
+        "habitSortBy" to habitSortBy.value.name,
     )
 
     fun importMap(m: Map<String, String>) {
@@ -197,5 +230,7 @@ class Prefs(context: Context) {
         m["smartInput"]?.let { v -> setSmartInput(v == "true") }
         m["taskGroupBy"]?.let { v -> runCatching { setTaskGroupBy(TaskGroupBy.valueOf(v)) } }
         m["taskSortBy"]?.let { v -> runCatching { setTaskSortBy(TaskSortBy.valueOf(v)) } }
+        m["habitGroupBy"]?.let { v -> runCatching { setHabitGroupBy(HabitGroupBy.valueOf(v)) } }
+        m["habitSortBy"]?.let { v -> runCatching { setHabitSortBy(HabitSortBy.valueOf(v)) } }
     }
 }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo esta carpeta temporal se puede compartir (para "Subir a Drive"). -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

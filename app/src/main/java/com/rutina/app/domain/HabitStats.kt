@@ -172,6 +172,7 @@ object HabitStats {
 
         val weekly = h.period == GoalPeriod.WEEK || (h.scheduleType == ScheduleType.DAYS_PER_WEEK && h.period == GoalPeriod.DAY)
         val (recent, label) = when {
+            h.period == GoalPeriod.YEAR -> results.takeLast(3) to "Últimos 3 años"
             h.period == GoalPeriod.MONTH -> results.takeLast(3) to "Últimos 3 meses"
             weekly -> results.takeLast(4) to "Últimas 4 semanas"
             else -> results.filter { it.first >= today.minusDays(29) } to "Últimos 30 días"
@@ -180,7 +181,7 @@ object HabitStats {
         return HabitSummary(
             current = current,
             best = best,
-            streakUnit = when { h.period == GoalPeriod.MONTH -> "meses"; weekly -> "semanas"; else -> "días" },
+            streakUnit = when { h.period == GoalPeriod.YEAR -> "años"; h.period == GoalPeriod.MONTH -> "meses"; weekly -> "semanas"; else -> "días" },
             recentRate = rate(recent),
             recentLabel = label,
             totalRate = rate(results),
@@ -194,7 +195,7 @@ object HabitStats {
         var prev = h.createdAt
         var best = 0L
         for (r in resets) { best = maxOf(best, r - prev); prev = r }
-        val current = now - (h.quitSince ?: prev)
+        val current = HabitLogic.quitNow(h, now) - (h.quitSince ?: prev)
         return QuitSummary(current, maxOf(best, current), resets.asReversed())
     }
 
@@ -209,7 +210,7 @@ object HabitStats {
                 val a = HabitLogic.weekStartOf(today, weekStart).minusWeeks(i.toLong())
                 ChartPoint("${a.dayOfMonth}/${a.monthValue}", (0..6).sumOf { totals[a.plusDays(it.toLong())] ?: 0.0 })
             }
-            GoalPeriod.MONTH -> (5 downTo 0).map { i ->
+            GoalPeriod.MONTH, GoalPeriod.YEAR -> ((if (h.period == GoalPeriod.YEAR) 11 else 5) downTo 0).map { i ->
                 val a = today.withDayOfMonth(1).minusMonths(i.toLong())
                 val days = a.lengthOfMonth()
                 ChartPoint(
@@ -223,5 +224,6 @@ object HabitStats {
         GoalPeriod.DAY -> "Últimos 14 días"
         GoalPeriod.WEEK -> "Últimas 8 semanas"
         GoalPeriod.MONTH -> "Últimos 6 meses"
+        GoalPeriod.YEAR -> "Últimos 12 meses"
     }
 }

@@ -12,7 +12,7 @@ enum class TrackingType { COUNT, QUIT, MOOD, WEIGHT, HEALTH, JOURNAL }
 /** Positivo = llegar a la meta; Negativo = no pasarse; Ninguno = solo registrar. */
 enum class GoalType { POSITIVE, NEGATIVE, NONE }
 
-enum class GoalPeriod { DAY, WEEK, MONTH }
+enum class GoalPeriod { DAY, WEEK, MONTH, YEAR }
 
 /** Qué días toca el hábito. */
 enum class ScheduleType { ALL_DAYS, SPECIFIC_DAYS, DAYS_PER_WEEK }
@@ -41,6 +41,20 @@ data class Habit(
     val archived: Boolean = false,
     val sortOrder: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
+    /** Lista a la que pertenece (las mismas listas que las tareas). */
+    val listId: Long? = null,
+    /** 0 = ninguna, 1 baja, 2 media, 3 alta. */
+    @ColumnInfo(defaultValue = "0") val priority: Int = 0,
+    /** Plural de la unidad ("páginas"); vacío = automático. */
+    @ColumnInfo(defaultValue = "''") val unitPlural: String = "",
+    /** Cuánto suma el botón +. */
+    @ColumnInfo(defaultValue = "1.0") val step: Double = 1.0,
+    /** Hábito de Dejar en pausa desde este momento (el contador se congela). */
+    val pausedAt: Long? = null,
+    /** Temporizador preferido: "STOPWATCH" o "COUNTDOWN" (null = el último usado). */
+    val timerMode: String? = null,
+    /** Minutos de la cuenta atrás preferida. */
+    val timerMinutes: Int? = null,
 )
 
 @Entity(

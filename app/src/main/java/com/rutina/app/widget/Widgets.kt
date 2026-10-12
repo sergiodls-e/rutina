@@ -87,7 +87,8 @@ class AddHabitAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val id = parameters[IdKey] ?: return
         val db = (context.applicationContext as RutinaApp).db
-        db.habits().insertLog(HabitLog(habitId = id, timestamp = System.currentTimeMillis(), value = 1.0))
+        val step = db.habits().get(id)?.step ?: 1.0
+        db.habits().insertLog(HabitLog(habitId = id, timestamp = System.currentTimeMillis(), value = step))
         Widgets.refresh(context)
     }
 }
