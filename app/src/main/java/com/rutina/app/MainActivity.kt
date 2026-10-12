@@ -8,6 +8,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.rutina.app.ui.timer.TimerScreen
+import com.rutina.app.ui.stats.HabitStatsScreen
+import com.rutina.app.ui.stats.HabitStatsViewModel
+import com.rutina.app.ui.stats.StatsScreen
+import com.rutina.app.ui.stats.StatsViewModel
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -87,7 +91,7 @@ class MainActivity : ComponentActivity() {
                         TimerScreen(app.timer, remember { db.habits().observeActive() }, onClose = { nav.popBackStack() })
                     }
                     composable("main") {
-                        val todayVm: TodayViewModel = viewModel { TodayViewModel(db) }
+                        val todayVm: TodayViewModel = viewModel { TodayViewModel(db, app.prefs) }
                         val journalVm: JournalViewModel = viewModel { JournalViewModel(db) }
                         MainTabs(
                             todayVm = todayVm,
@@ -105,6 +109,23 @@ class MainActivity : ComponentActivity() {
                             onManageLists = { nav.navigate("lists") },
                             timerActive = timerState.active,
                             onOpenTimer = { nav.navigate("timer") { launchSingleTop = true } },
+                            onOpenStats = { nav.navigate("stats") },
+                            onHabitStats = { id -> nav.navigate("habit/stats/$id") },
+                        )
+                    }
+                    composable("stats") {
+                        val vm: StatsViewModel = viewModel { StatsViewModel(db) }
+                        StatsScreen(vm, onClose = { nav.popBackStack() }, onHabit = { id -> nav.navigate("habit/stats/$id") })
+                    }
+                    composable(
+                        "habit/stats/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.LongType }),
+                    ) { entry ->
+                        val id = entry.arguments?.getLong("id") ?: 0L
+                        val vm: HabitStatsViewModel = viewModel { HabitStatsViewModel(db, id) }
+                        HabitStatsScreen(
+                            vm, onClose = { nav.popBackStack() },
+                            onEdit = { hid -> nav.navigate("habit/form?id=$hid") },
                         )
                     }
                     composable(
@@ -163,7 +184,7 @@ class MainActivity : ComponentActivity() {
                         val i = args?.getInt("i") ?: -1
                         val preset = Suggestions.groups.getOrNull(g)?.items?.getOrNull(i)
                         val vm: HabitEditorViewModel = viewModel { HabitEditorViewModel(db, id, preset) }
-                        HabitFormScreen(vm, onClose = { nav.popBackStack("main", inclusive = false) })
+                        HabitFormScreen(vm, onClose = { nav.popBackStack() })
                     }
                 }
             }
@@ -200,6 +221,8 @@ private fun MainTabs(
     onManageLists: () -> Unit,
     timerActive: Boolean,
     onOpenTimer: () -> Unit,
+    onOpenStats: () -> Unit,
+    onHabitStats: (Long) -> Unit,
 ) {
     var tab by rememberSaveable { mutableTabState() }
     Scaffold(
@@ -226,6 +249,8 @@ private fun MainTabs(
                     onWriteNote = { habitId -> onNewNote(habitId) },
                     timerActive = timerActive,
                     onOpenTimer = onOpenTimer,
+                    onOpenStats = onOpenStats,
+                    onHabitStats = onHabitStats,
                 )
                 Tab.JOURNAL -> JournalScreen(
                     journalVm,

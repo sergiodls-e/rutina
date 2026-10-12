@@ -52,6 +52,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CalendarViewMonth
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.ViewWeek
+import com.rutina.app.data.HabitDisplay
+import com.rutina.app.domain.HabitStats
+import com.rutina.app.ui.common.DayCell
+import com.rutina.app.ui.common.MonthGrid
+import com.rutina.app.ui.common.YearHeatmap
+import com.rutina.app.ui.common.weekdayLetters
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Check
@@ -118,8 +129,21 @@ fun TodayScreen(
     onWriteNote: (habitId: Long) -> Unit,
     timerActive: Boolean,
     onOpenTimer: () -> Unit,
+    onOpenStats: () -> Unit,
+    onHabitStats: (Long) -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val display by vm.display.collectAsStateWithLifecycle()
+    val today = LocalDate.now()
+    fun tapDay(row: HabitRow, day: LocalDate) {
+        when {
+            row.habit.type != TrackingType.COUNT -> onHabitStats(row.habit.id)
+            day <= today -> vm.addOn(row.habit, day)
+        }
+    }
+    fun longDay(row: HabitRow, day: LocalDate) {
+        if (row.habit.type == TrackingType.COUNT && day <= today) vm.undoOn(row.habit, day)
+    }
     var fabOpen by remember { mutableStateOf(false) }
     var showTaskSheet by remember { mutableStateOf(false) }
     var actionsFor by remember { mutableStateOf<HabitRow?>(null) }
@@ -136,6 +160,8 @@ fun TodayScreen(
                 state = state,
                 onPick = { v -> vm.show(v); scope.launch { drawer.close() } },
                 onManage = { scope.launch { drawer.close() }; onManageLists() },
+                display = display,
+                onDisplay = { d -> vm.setDisplay(d); scope.launch { drawer.close() } },
             )
         },
     ) {
@@ -145,7 +171,10 @@ fun TodayScreen(
             topBar = {
                 TopAppBar(
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, "Menú") }
+                        Row {
+                            IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, "Menú", tint = Color.White) }
+                            IconButton(onClick = onOpenStats) { Icon(Icons.Filled.BarChart, "Estadísticas", tint = Color.White) }
+                        }
                     },
                     title = {
                         val title = if (state.view == MainView.Today && state.date != LocalDate.now()) {
@@ -161,7 +190,7 @@ fun TodayScreen(
                         IconButton(onClick = onOpenTimer) {
                             Icon(
                                 Icons.Filled.Timer, "Temporizador",
-                                tint = if (timerActive) Accent else Color.Unspecified,
+                                tint = if (timerActive) Accent else Color.White,
                             )
                         }
                     },
@@ -224,18 +253,35 @@ fun TodayScreen(
                     ) {
                         if (state.habits.isNotEmpty()) {
                             item { SectionHeader(if (state.view == MainView.Today) "Hábitos diarios" else "Hábitos", state.habits.size) }
+                            if (display == HabitDisplay.WEEK) item(key = "weekhead") { WeekHeader(state.date, vm.weekStart) }
                             items(state.habits, key = { "h" + it.habit.id }) { row ->
-                                HabitCard(
-                                    row = row,
-                                    onPrimary = {
-                                        when (row.habit.type) {
-                                            TrackingType.QUIT -> actionsFor = row
-                                            TrackingType.JOURNAL -> onWriteNote(row.habit.id)
-                                            else -> vm.add(row.habit)
-                                        }
-                                    },
-                                    onLong = { actionsFor = row },
-                                )
+                                when (display) {
+                                    HabitDisplay.COMPACT -> HabitCard(
+                                        row = row,
+                                        onPrimary = {
+                                            when (row.habit.type) {
+                                                TrackingType.QUIT -> actionsFor = row
+                                                TrackingType.JOURNAL -> onWriteNote(row.habit.id)
+                                                else -> vm.add(row.habit)
+                                            }
+                                        },
+                                        onLong = { actionsFor = row },
+                                        onName = { onHabitStats(row.habit.id) },
+                                    )
+                                    HabitDisplay.WEEK -> HabitWeekRow(
+                                        row, state.date, vm.weekStart,
+                                        onName = { onHabitStats(row.habit.id) },
+                                        onTap = { tapDay(row, it) }, onLongTap = { longDay(row, it) },
+                                    )
+                                    HabitDisplay.MONTH -> HabitMonthCard(
+                                        row, state.date, vm.weekStart,
+                                        onName = { onHabitStats(row.habit.id) },
+                                        onTap = { tapDay(row, it) }, onLongTap = { longDay(row, it) },
+                                    )
+                                    HabitDisplay.YEAR -> HabitYearCard(
+                                        row, vm.weekStart, onName = { onHabitStats(row.habit.id) },
+                                    )
+                                }
                             }
                         }
                         state.taskGroups.forEach { (title, tasks) ->
@@ -276,12 +322,19 @@ fun TodayScreen(
             onUndo = { vm.undo(row.habit); actionsFor = null },
             onReset = { vm.resetQuit(row.habit); actionsFor = null },
             onEdit = { actionsFor = null; onEditHabit(row.habit.id) },
+            onStats = { actionsFor = null; onHabitStats(row.habit.id) },
         )
     }
 }
 
 @Composable
-private fun MainDrawer(state: TodayState, onPick: (MainView) -> Unit, onManage: () -> Unit) {
+private fun MainDrawer(
+    state: TodayState,
+    onPick: (MainView) -> Unit,
+    onManage: () -> Unit,
+    display: HabitDisplay,
+    onDisplay: (HabitDisplay) -> Unit,
+) {
     ModalDrawerSheet(drawerContainerColor = Color(0xFF181818), modifier = Modifier.width(300.dp)) {
         Column(Modifier.fillMaxHeight().padding(12.dp)) {
             Text("Listas / Filtros", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
@@ -296,6 +349,19 @@ private fun MainDrawer(state: TodayState, onPick: (MainView) -> Unit, onManage: 
                 if (state.filters.isNotEmpty()) item { DrawerLabel("Filtros") }
                 items(state.filters, key = { "df" + it.id }) { f ->
                     DrawerItem(f.name, Icons.Filled.FilterAlt, Color(f.color), null, state.view == MainView.OfFilter(f.id)) { onPick(MainView.OfFilter(f.id)) }
+                }
+                item { DrawerLabel("Visualización de hábitos") }
+                items(HabitDisplay.entries, key = { "dv" + it.name }) { d ->
+                    DrawerItem(
+                        d.label,
+                        when (d) {
+                            HabitDisplay.COMPACT -> Icons.Filled.ViewAgenda
+                            HabitDisplay.WEEK -> Icons.Filled.ViewWeek
+                            HabitDisplay.MONTH -> Icons.Filled.CalendarViewMonth
+                            HabitDisplay.YEAR -> Icons.Filled.GridOn
+                        },
+                        Color(0xFFB39DDB), null, display == d,
+                    ) { onDisplay(d) }
                 }
             }
             Surface(
@@ -393,7 +459,7 @@ private fun SectionHeader(title: String, count: Int) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit) {
+private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit, onName: () -> Unit) {
     val h = row.habit
     val color = Color(h.color)
     val isQuit = h.type == TrackingType.QUIT
@@ -416,6 +482,7 @@ private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit) 
         Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.widthIn(min = 80.dp, max = 150.dp).clip(RoundedCornerShape(8.dp)).background(color)
+                    .clickable(onClick = onName)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -484,7 +551,7 @@ private fun TaskRow(task: Task, list: TaskList?, onToggle: () -> Unit, onOpen: (
             Text(
                 task.title,
                 textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                color = if (task.done) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
+                color = if (task.done) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
             )
             val parts = listOfNotNull(
                 TaskLogic.dueLabel(task),
@@ -605,6 +672,7 @@ private fun HabitActionsDialog(
     onUndo: () -> Unit,
     onReset: () -> Unit,
     onEdit: () -> Unit,
+    onStats: () -> Unit,
 ) {
     val h: Habit = row.habit
     var amount by remember { mutableStateOf("") }
@@ -641,7 +709,10 @@ private fun HabitActionsDialog(
                         TextButton(onClick = onUndo) { Text("Deshacer último registro") }
                     }
                 }
-                TextButton(onClick = onEdit) { Text("Editar hábito") }
+                Row {
+                    TextButton(onClick = onStats) { Text("Estadísticas") }
+                    TextButton(onClick = onEdit) { Text("Editar hábito") }
+                }
             }
         },
         confirmButton = {
@@ -658,4 +729,119 @@ private fun HabitActionsDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },
     )
+}
+
+// ---------------------------------------------------------------- Vistas semanal, mensual y anual
+
+@Composable
+private fun NameChip(row: HabitRow, onName: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(8.dp)).background(Color(row.habit.color)).clickable(onClick = onName)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            row.habit.name, color = Color.Black, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (row.streak > 0) {
+            Spacer(Modifier.width(4.dp))
+            Text("${row.streak}", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Icon(Icons.Filled.LocalFireDepartment, null, Modifier.size(12.dp), tint = Color.Black)
+        }
+    }
+}
+
+private val NameWidth = 112.dp
+
+@Composable
+private fun WeekHeader(selected: LocalDate, weekStart: java.time.DayOfWeek) {
+    val start = HabitLogic.weekStartOf(selected, weekStart)
+    val letters = weekdayLetters(weekStart)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Spacer(Modifier.width(NameWidth))
+        (0 until 7).forEach { i ->
+            val d = start.plusDays(i.toLong())
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(letters[i], fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    d.dayOfMonth.toString(), fontSize = 12.sp,
+                    fontWeight = if (d == selected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (d == LocalDate.now()) Color(0xFF8FD3C1) else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HabitWeekRow(
+    row: HabitRow, selected: LocalDate, weekStart: java.time.DayOfWeek,
+    onName: () -> Unit, onTap: (LocalDate) -> Unit, onLongTap: (LocalDate) -> Unit,
+) {
+    val start = HabitLogic.weekStartOf(selected, weekStart)
+    val today = LocalDate.now()
+    val color = Color(row.habit.color)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        NameChip(row, onName, Modifier.width(NameWidth))
+        (0 until 7).forEach { i ->
+            val d = start.plusDays(i.toLong())
+            DayCell(
+                d, HabitStats.cell(row.habit, d, row.totals, row.resets, today), color,
+                modifier = Modifier.weight(1f).height(36.dp),
+                showNumber = false,
+                onTap = onTap, onLongTap = onLongTap,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HabitMonthCard(
+    row: HabitRow, selected: LocalDate, weekStart: java.time.DayOfWeek,
+    onName: () -> Unit, onTap: (LocalDate) -> Unit, onLongTap: (LocalDate) -> Unit,
+) {
+    val today = LocalDate.now()
+    val month = java.time.YearMonth.from(selected)
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            NameChip(row, onName, Modifier.weight(1f, fill = false))
+            Spacer(Modifier.weight(1f))
+            Text(
+                month.month.getDisplayName(TextStyle.FULL, es).replaceFirstChar { it.uppercase() },
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+            )
+        }
+        MonthGrid(
+            month, weekStart, Color(row.habit.color),
+            cellFor = { d -> HabitStats.cell(row.habit, d, row.totals, row.resets, today) },
+            selected = selected,
+            onTap = onTap, onLongTap = onLongTap,
+        )
+    }
+}
+
+@Composable
+private fun HabitYearCard(row: HabitRow, weekStart: java.time.DayOfWeek, onName: () -> Unit) {
+    val today = LocalDate.now()
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onName).padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        NameChip(row, onName)
+        YearHeatmap(
+            today, weekStart, Color(row.habit.color),
+            cellFor = { d -> HabitStats.cell(row.habit, d, row.totals, row.resets, today) },
+        )
+    }
 }

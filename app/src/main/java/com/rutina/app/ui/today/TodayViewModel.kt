@@ -12,6 +12,9 @@ import com.rutina.app.data.TaskFilter
 import com.rutina.app.data.TaskList
 import com.rutina.app.data.TrackingType
 import com.rutina.app.domain.HabitLogic
+import com.rutina.app.domain.HabitStats
+import com.rutina.app.data.HabitDisplay
+import com.rutina.app.data.Prefs
 import com.rutina.app.domain.NoteLogic
 import com.rutina.app.domain.TaskLogic
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +34,10 @@ data class HabitRow(
     val fraction: Float,
     val met: Boolean,
     val streak: Int,
+    /** Total registrado por día (para las vistas semanal/mensual/anual). */
+    val totals: Map<LocalDate, Double> = emptyMap(),
+    /** Días con recaída (hábitos de Dejar). */
+    val resets: Set<LocalDate> = emptySet(),
 )
 
 /** Qué se muestra en la pantalla principal (se elige desde el menú lateral). */
@@ -69,7 +76,13 @@ private data class Base(
     val tasks: List<Task>,
 )
 
-class TodayViewModel(private val db: AppDatabase) : ViewModel() {
+class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : ViewModel() {
+
+    /** Vista de hábitos elegida en el menú: compacta, semanal, mensual o anual. */
+    val display: StateFlow<HabitDisplay> = prefs.habitDisplay
+
+    fun setDisplay(d: HabitDisplay) = prefs.setHabitDisplay(d)
+
 
     // TODO Fase 9: leer de Ajustes.
     val weekStart: DayOfWeek = DayOfWeek.SUNDAY
@@ -103,7 +116,9 @@ class TodayViewModel(private val db: AppDatabase) : ViewModel() {
                 met = h.type != TrackingType.QUIT && h.goalType != GoalType.NEGATIVE && HabitLogic.isMet(h, p),
                 streak = if (h.type == TrackingType.QUIT) {
                     h.quitSince?.let { ChronoUnit.DAYS.between(HabitLogic.dateOf(it), today).toInt() } ?: 0
-                } else HabitLogic.streak(h, hl, today, weekStart),
+                } else HabitStats.summary(h, hl, weekStart, today).current,
+                totals = HabitStats.dayTotals(hl),
+                resets = if (h.type == TrackingType.QUIT) HabitStats.resetDays(hl) else emptySet(),
             )
         }
 
@@ -181,6 +196,16 @@ class TodayViewModel(private val db: AppDatabase) : ViewModel() {
 
     fun add(habit: Habit, amount: Double = 1.0, note: String? = null) = viewModelScope.launch {
         db.habits().insertLog(HabitLog(habitId = habit.id, timestamp = stampFor(selected.value), value = amount, note = note))
+    }
+
+    /** Registra en un día concreto (desde las vistas semanal/mensual). */
+    fun addOn(habit: Habit, date: LocalDate) = viewModelScope.launch {
+        db.habits().insertLog(HabitLog(habitId = habit.id, timestamp = stampFor(date), value = 1.0))
+    }
+
+    /** Quita el último registro de ese día. */
+    fun undoOn(habit: Habit, date: LocalDate) = viewModelScope.launch {
+        db.habits().deleteLatestLog(habit.id, HabitLogic.startOfDay(date), HabitLogic.startOfDay(date.plusDays(1)))
     }
 
     fun undo(habit: Habit) = viewModelScope.launch {

@@ -105,7 +105,7 @@ fun JournalScreen(
                         Icon(
                             if (f.starredOnly) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                             "Notas marcadas",
-                            tint = if (f.starredOnly) Accent else Color.Unspecified,
+                            tint = if (f.starredOnly) Accent else Color.White,
                         )
                     }
                 },

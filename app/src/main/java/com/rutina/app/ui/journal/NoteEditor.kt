@@ -223,7 +223,7 @@ fun NoteEditorScreen(vm: NoteEditorViewModel, onClose: () -> Unit) {
                         Icon(
                             if (note.starred) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                             if (note.starred) "Quitar marca" else "Marcar",
-                            tint = if (note.starred) Accent else Color.Unspecified,
+                            tint = if (note.starred) Accent else Color.White,
                         )
                     }
                     if (vm.isEdit) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "Eliminar") }
