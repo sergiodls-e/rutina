@@ -82,12 +82,23 @@ class MainActivity : ComponentActivity() {
     /** Se pone en true al abrir la app desde la notificación del temporizador. */
     private val openTimer = mutableStateOf(false)
 
+    /** Pantalla a abrir desde un widget (nota nueva o estadísticas de un hábito). */
+    private val pendingRoute = mutableStateOf<String?>(null)
+
+    private fun routeFrom(i: Intent?): String? = when {
+        i == null -> null
+        i.hasExtra(EXTRA_NEW_NOTE) -> "note/form?habit=${i.getLongExtra(EXTRA_NEW_NOTE, -1L)}"
+        i.hasExtra(EXTRA_HABIT_STATS) -> "habit/stats/${i.getLongExtra(EXTRA_HABIT_STATS, 0L)}"
+        else -> null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as RutinaApp
         val db = app.db
         openTimer.value = intent?.getBooleanExtra(EXTRA_OPEN_TIMER, false) == true
+        if (savedInstanceState == null) pendingRoute.value = routeFrom(intent)
         setContent {
             val textSize by app.prefs.textSize.collectAsState()
             val baseDensity = androidx.compose.ui.platform.LocalDensity.current
@@ -98,6 +109,12 @@ class MainActivity : ComponentActivity() {
             ) {
             RutinaTheme(dark = true) {
                 val nav = rememberNavController()
+                LaunchedEffect(pendingRoute.value) {
+                    pendingRoute.value?.let { r ->
+                        runCatching { nav.navigate(r) { launchSingleTop = true } }
+                        pendingRoute.value = null
+                    }
+                }
                 LaunchedEffect(openTimer.value) {
                     if (openTimer.value) {
                         nav.navigate("timer") { launchSingleTop = true }
@@ -253,10 +270,13 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_TIMER, false)) openTimer.value = true
+        routeFrom(intent)?.let { pendingRoute.value = it }
     }
 
     companion object {
         const val EXTRA_OPEN_TIMER = "open_timer"
+        const val EXTRA_NEW_NOTE = "new_note"
+        const val EXTRA_HABIT_STATS = "habit_stats"
     }
 }
 

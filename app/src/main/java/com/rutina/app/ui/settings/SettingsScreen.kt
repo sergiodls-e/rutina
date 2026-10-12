@@ -224,6 +224,22 @@ fun SettingsScreen(
                     ActionPill("Añadir") { pinWidget(ctx, TasksWidgetReceiver::class.java) }
                 }
             }
+            item {
+                SettingRow("Informe del hábito", "Un hábito con su historial") {
+                    ActionPill("Añadir") { pinWidget(ctx, com.rutina.app.widget.HabitReportWidgetReceiver::class.java) }
+                }
+            }
+            item {
+                SettingRow("Nota del diario", "Escribe una nota con un toque") {
+                    ActionPill("Añadir") { pinWidget(ctx, com.rutina.app.widget.JournalWidgetReceiver::class.java) }
+                }
+            }
+            item {
+                Text(
+                    "Mantén pulsado un widget en tu pantalla de inicio para elegir qué lista, filtro o hábito muestra.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp, 8.dp),
+                )
+            }
 
             item { Section("Health Connect", Icons.Filled.FavoriteBorder) }
             item { HealthConnectCard(health) }

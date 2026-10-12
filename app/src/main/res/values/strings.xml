@@ -5,4 +5,8 @@
     <string name="widget_habits_desc">Consulta y registra tus hábitos de hoy</string>
     <string name="widget_tasks">Tareas</string>
     <string name="widget_tasks_desc">Consulta y completa tus tareas pendientes</string>
+    <string name="widget_report">Informe del hábito</string>
+    <string name="widget_report_desc">Un hábito con su historial y botón para registrar</string>
+    <string name="widget_journal">Nota del diario</string>
+    <string name="widget_journal_desc">Escribe una nota y ve tus palabras de hoy</string>
 </resources>

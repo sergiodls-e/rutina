@@ -69,13 +69,13 @@ object Tutorial {
                     "Respaldo automático", Mock.SETTINGS, null,
                     "Elige la frecuencia: cada día, semana, 15 o 30 días",
                     "Elige una carpeta del teléfono; ahí se guardan los últimos 5",
-                    "Al terminar te llega un aviso: toca \"Subir a Drive\" para guardarlo en la nube",
+                    "Al terminar te ofrece \"Subir a Drive\" (y te llega un aviso con ese botón)",
                 ),
                 g(
                     "Crear un respaldo a mano", Mock.BACKUP, at(0.5f, 0.82f),
                     "En \"Ajustes\" toca \"Crear respaldo\"",
                     "Se cifra con tu contraseña de respaldo (o con otra si lo prefieres)",
-                    "Elige Google Drive o una carpeta del teléfono para guardar el archivo",
+                    "Toca \"Subir a Drive\" para abrir Drive con el archivo listo, o \"Guardar en una carpeta\"",
                 ),
                 g(
                     "Cambiar de teléfono", Mock.SETTINGS, null,
@@ -121,8 +121,8 @@ object Tutorial {
                 g(
                     "Objetivos y unidades", Mock.HABIT_GOAL, at(0.5f, 0.42f),
                     "Elige 👍 Positivo (llegar a una meta), 👎 Negativo (no pasarte) o Sin objetivo",
-                    "Define la cantidad y la unidad: vez, min, vasos, páginas o la tuya",
-                    "Elige si la meta es por día, por semana o por mes",
+                    "Define la cantidad y la unidad: vez, min, vasos… o \"Unidad propia\" con singular y plural",
+                    "Elige si la meta es por día, semana, mes o año y cuánto suma el botón +",
                 ),
                 g(
                     "Días del hábito", Mock.HABIT_GOAL, at(0.5f, 0.6f),
@@ -155,6 +155,30 @@ object Tutorial {
                     "Toca un día para sumar y mantenlo pulsado para deshacer",
                 ),
                 g(
+                    "Registro de actividad", Mock.HABIT_STATS, null,
+                    "Toca el nombre del hábito y baja a \"Registro de actividad\"",
+                    "Toca un registro para corregir cantidad, fecha, hora o nota, o eliminarlo",
+                    "Usa \"Añadir registro de otro día\" si olvidaste anotar algo",
+                ),
+                g(
+                    "Listas y prioridades", Mock.HABIT_FORM, null,
+                    "En el editor del hábito elige una \"Lista\" (las mismas que las tareas) y su prioridad",
+                    "Al abrir esa lista desde ☰ verás sus hábitos y tareas juntos",
+                    "Los filtros también muestran hábitos por lista, prioridad o texto",
+                ),
+                g(
+                    "Agrupar, ordenar y mover", Mock.HABITS, at(0.78f, 0.06f),
+                    "En \"Hoy\" toca el ícono de ordenar arriba",
+                    "Agrupa por lista o prioridad y ordena por nombre, prioridad o racha",
+                    "\"Reordenar hábitos…\" te deja ponerlos en tu orden con flechas",
+                ),
+                g(
+                    "Informes", Mock.STATS_OVERVIEW, null,
+                    "Abre ☰ y elige \"Informes\"",
+                    "Elige semana o mes y muévete con las flechas",
+                    "Guarda o comparte la imagen del informe",
+                ),
+                g(
                     "Estadísticas de un hábito", Mock.HABIT_STATS, null,
                     "Toca el nombre de color de un hábito",
                     "Revisa racha actual, mejor racha, % de éxito y totales",
@@ -176,7 +200,7 @@ object Tutorial {
                     "Dejar hábitos", Mock.QUIT, at(0.5f, 0.27f),
                     "Elige una sugerencia de \"Dejar\" o el tipo de seguimiento \"Dejar\"",
                     "Indica la fecha y hora en que lo dejaste",
-                    "Si recaes, toca la fila y \"Reiniciar contador\": queda guardado y ves tu mejor marca",
+                    "Si recaes, \"Reiniciar contador\". En sus estadísticas puedes \"Pausar\" si tu situación cambia",
                 ),
                 g(
                     "Estado de ánimo", Mock.MOOD, at(0.9f, 0.27f),
@@ -363,6 +387,12 @@ object Tutorial {
                     "Si lo eliminas, también se quita del progreso del hábito",
                 ),
                 g(
+                    "Deshacer y enlaces", Mock.NOTE, null,
+                    "Usa ↶ y ↷ en la barra para deshacer o rehacer",
+                    "Escribe o pega un enlace (https://…) y se vuelve tocable",
+                    "Los enlaces se abren en tu navegador; Rutina no se conecta a Internet",
+                ),
+                g(
                     "Exportar notas", Mock.JOURNAL, at(0.9f, 0.06f),
                     "Toca ⋯ en el \"Diario\" y \"Exportar notas\"",
                     "Se crea un archivo Markdown con lo que estás viendo",
@@ -390,6 +420,12 @@ object Tutorial {
                     "Elige \"Cuenta atrás\", un hábito y la duración con la rueda o un atajo",
                     "Inicia y permite las notificaciones cuando se te pida",
                     "Al terminar suena aunque la app esté cerrada y te pregunta si registrar",
+                ),
+                g(
+                    "Temporizador de un hábito", Mock.HABIT_FORM, null,
+                    "Edita un hábito de Recuento en minutos u horas",
+                    "En \"Temporizador\" elige cronómetro o cuenta atrás y su duración",
+                    "Ábrelo con ⏱ desde el hábito (o sus estadísticas): ya viene configurado",
                 ),
                 g(
                     "En segundo plano", Mock.TIMER, null,
@@ -460,6 +496,24 @@ object Tutorial {
                     "Muestra los hábitos que tocan hoy con su progreso",
                     "Toca + para sumar 1 sin abrir la app",
                     "Toca el título o los demás botones para abrir Rutina",
+                ),
+                g(
+                    "Elegir qué muestra", Mock.WIDGET_HABITS, null,
+                    "Al añadir un widget (o manteniéndolo pulsado → Configurar) eliges qué muestra",
+                    "Hábitos: los de hoy, todos o una lista. Tareas: hoy, todas, una lista o un filtro",
+                    "Puedes poner varios widgets, cada uno con su propia lista",
+                ),
+                g(
+                    "Informe del hábito", Mock.WIDGET_HABITS, null,
+                    "Añade el widget \"Informe del hábito\" y elige un hábito",
+                    "Muestra u oculta su historial de las últimas 16 semanas",
+                    "Usa + para registrar sin abrir la app; tócalo para ver sus estadísticas",
+                ),
+                g(
+                    "Nota del diario", Mock.WIDGET_TASKS, null,
+                    "Añade el widget \"Nota del diario\"",
+                    "Elige, si quieres, la etiqueta de hábito para las notas nuevas",
+                    "Tócalo para escribir; muestra las palabras que llevas hoy",
                 ),
                 g(
                     "Lista de tareas", Mock.WIDGET_TASKS, at(0.86f, 0.13f),

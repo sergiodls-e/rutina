@@ -13,8 +13,10 @@ import androidx.glance.GlanceModifier
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
@@ -60,6 +62,8 @@ object Widgets {
     suspend fun refresh(context: Context) {
         runCatching { HabitsWidget().updateAll(context) }
         runCatching { TasksWidget().updateAll(context) }
+        runCatching { HabitReportWidget().updateAll(context) }
+        runCatching { JournalWidget().updateAll(context) }
     }
 }
 
@@ -70,10 +74,13 @@ private val IdKey = ActionParameters.Key<Long>("id")
 class HabitsWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val db = (context.applicationContext as RutinaApp).db
-        val initial = WidgetData.habits(db).first()
+        val wid = GlanceAppWidgetManager(context).getAppWidgetId(id)
+        val sel0 = WidgetConfig.get(context, wid, "sel", "today")
+        val initial = WidgetData.habits(db, sel0).first()
         provideContent {
-            val rows by remember { WidgetData.habits(db) }.collectAsState(initial)
-            HabitsContent(rows)
+            val sel by remember { WidgetConfig.flow(context, wid, "sel", "today") }.collectAsState(sel0)
+            val data by remember(sel) { WidgetData.habits(db, sel) }.collectAsState(initial)
+            HabitsContent(data.title, data.rows)
         }
     }
 }
@@ -94,7 +101,7 @@ class AddHabitAction : ActionCallback {
 }
 
 @Composable
-private fun HabitsContent(rows: List<WHabit>) {
+private fun HabitsContent(title: String, rows: List<WHabit>) {
     Column(GlanceModifier.fillMaxSize().background(Bg).cornerRadius(20.dp).padding(10.dp)) {
         Row(
             GlanceModifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 6.dp)
@@ -102,7 +109,7 @@ private fun HabitsContent(rows: List<WHabit>) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Hábitos de hoy", modifier = GlanceModifier.defaultWeight(),
+                title, modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = White, fontSize = 15.sp, fontWeight = FontWeight.Bold),
             )
             // Los hábitos de Dejar y Peso no tienen meta diaria: no cuentan en "hechos de hoy".
@@ -110,7 +117,7 @@ private fun HabitsContent(rows: List<WHabit>) {
             Text("${goals.count { it.met }}/${goals.size}", style = TextStyle(color = Dim, fontSize = 13.sp))
         }
         if (rows.isEmpty()) {
-            Text("No hay hábitos para hoy", modifier = GlanceModifier.padding(4.dp), style = TextStyle(color = Dim, fontSize = 13.sp))
+            Text("No hay hábitos aquí", modifier = GlanceModifier.padding(4.dp), style = TextStyle(color = Dim, fontSize = 13.sp))
         } else {
             LazyColumn(GlanceModifier.fillMaxSize()) {
                 items(rows, itemId = { it.id }) { r -> HabitRow(r) }
@@ -132,10 +139,13 @@ private fun HabitRow(r: WHabit) {
             ) {
                 Text(r.name, maxLines = 1, style = TextStyle(color = Black, fontSize = 13.sp, fontWeight = FontWeight.Medium))
             }
-            Text(
-                r.text, maxLines = 1, modifier = GlanceModifier.defaultWeight().padding(horizontal = 8.dp),
-                style = TextStyle(color = White, fontSize = 13.sp),
-            )
+            Column(GlanceModifier.defaultWeight().padding(horizontal = 8.dp)) {
+                Text(r.text, maxLines = 1, style = TextStyle(color = White, fontSize = 13.sp))
+                if (r.fraction > 0f || r.type == TrackingType.COUNT || r.type == TrackingType.HEALTH || r.type == TrackingType.JOURNAL) {
+                    Spacer(GlanceModifier.height(3.dp))
+                    ProgressBar(r.fraction, Color(r.color))
+                }
+            }
             val action = if (r.type == TrackingType.COUNT) {
                 actionRunCallback<AddHabitAction>(actionParametersOf(IdKey to r.id))
             } else actionStartActivity<MainActivity>()
@@ -165,10 +175,13 @@ private fun HabitRow(r: WHabit) {
 class TasksWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val db = (context.applicationContext as RutinaApp).db
-        val initial = WidgetData.tasks(db).first()
+        val wid = GlanceAppWidgetManager(context).getAppWidgetId(id)
+        val sel0 = WidgetConfig.get(context, wid, "sel", "today")
+        val initial = WidgetData.tasks(db, sel0).first()
         provideContent {
-            val rows by remember { WidgetData.tasks(db) }.collectAsState(initial)
-            TasksContent(rows)
+            val sel by remember { WidgetConfig.flow(context, wid, "sel", "today") }.collectAsState(sel0)
+            val data by remember(sel) { WidgetData.tasks(db, sel) }.collectAsState(initial)
+            TasksContent(data.title, data.rows)
         }
     }
 }
@@ -188,7 +201,7 @@ class CompleteTaskAction : ActionCallback {
 }
 
 @Composable
-private fun TasksContent(rows: List<WTask>) {
+private fun TasksContent(title: String, rows: List<WTask>) {
     Column(GlanceModifier.fillMaxSize().background(Bg).cornerRadius(20.dp).padding(10.dp)) {
         Row(
             GlanceModifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 6.dp)
@@ -196,7 +209,7 @@ private fun TasksContent(rows: List<WTask>) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Tareas", modifier = GlanceModifier.defaultWeight(),
+                title, modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = White, fontSize = 15.sp, fontWeight = FontWeight.Bold),
             )
             Text("${rows.size}", style = TextStyle(color = Dim, fontSize = 13.sp))
@@ -236,6 +249,139 @@ private fun TaskRow(t: WTask) {
             ) {
                 Text("✓", style = TextStyle(color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold))
             }
+        }
+    }
+}
+
+
+/** Barrita de progreso hecha con cajas (los widgets no tienen lienzo). */
+@Composable
+private fun ProgressBar(fraction: Float, color: Color) {
+    val f = fraction.coerceIn(0f, 1f)
+    Row(GlanceModifier.fillMaxWidth().height(4.dp).cornerRadius(2.dp).background(ButtonBg)) {
+        if (f > 0f) Box(GlanceModifier.width((150 * f).dp).height(4.dp).cornerRadius(2.dp).background(color)) { }
+    }
+}
+
+// ---------------------------------------------------------------- Informe del hábito
+
+class HabitReportWidget : GlanceAppWidget() {
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val db = (context.applicationContext as RutinaApp).db
+        val wid = GlanceAppWidgetManager(context).getAppWidgetId(id)
+        val h0 = WidgetConfig.get(context, wid, "habit", "")
+        val s0 = WidgetConfig.get(context, wid, "history", "1")
+        val initial = WidgetData.report(db, h0.toLongOrNull(), s0 == "1").first()
+        provideContent {
+            val hid by remember { WidgetConfig.flow(context, wid, "habit", "") }.collectAsState(h0)
+            val hist by remember { WidgetConfig.flow(context, wid, "history", "1") }.collectAsState(s0)
+            val data by remember(hid, hist) { WidgetData.report(db, hid.toLongOrNull(), hist == "1") }.collectAsState(initial)
+            ReportContent(data)
+        }
+    }
+}
+
+class HabitReportWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = HabitReportWidget()
+}
+
+@Composable
+private fun ReportContent(d: WReport) {
+    val h = d.habit
+    Column(GlanceModifier.fillMaxSize().background(Bg).cornerRadius(20.dp).padding(10.dp)) {
+        if (h == null) {
+            Text(
+                "Mantén pulsado el widget y elige un hábito",
+                modifier = GlanceModifier.padding(6.dp).clickable(actionStartActivity<MainActivity>()),
+                style = TextStyle(color = Dim, fontSize = 13.sp),
+            )
+        } else ReportBody(h, d)
+    }
+}
+
+@Composable
+private fun ReportBody(h: WHabit, d: WReport) {
+    Column(GlanceModifier.fillMaxSize()) {
+        val open = actionStartActivity(
+            android.content.Intent().setClassName("com.rutina.app", "com.rutina.app.MainActivity")
+                .putExtra(MainActivity.EXTRA_HABIT_STATS, h.id)
+        )
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(GlanceModifier.defaultWeight().clickable(open)) {
+                Box(GlanceModifier.cornerRadius(8.dp).background(Color(h.color)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text(h.name, maxLines = 1, style = TextStyle(color = Black, fontSize = 13.sp, fontWeight = FontWeight.Medium))
+                }
+                Spacer(GlanceModifier.height(4.dp))
+                Text(h.text, maxLines = 1, style = TextStyle(color = White, fontSize = 13.sp))
+            }
+            val action = if (h.type == TrackingType.COUNT) actionRunCallback<AddHabitAction>(actionParametersOf(IdKey to h.id)) else open
+            Box(
+                GlanceModifier.size(42.dp).cornerRadius(10.dp).background(if (h.met) Color(h.color) else ButtonBg).clickable(action),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (h.met) "✓" else if (h.type == TrackingType.COUNT) "+" else "›",
+                    style = TextStyle(color = if (h.met) Black else White, fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                )
+            }
+        }
+        d.history?.let { bmp ->
+            Spacer(GlanceModifier.height(8.dp))
+            androidx.glance.Image(
+                androidx.glance.ImageProvider(bmp), contentDescription = "Historial",
+                modifier = GlanceModifier.fillMaxWidth().defaultWeight().clickable(open),
+                contentScale = androidx.glance.layout.ContentScale.Fit,
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Nota del diario
+
+class JournalWidget : GlanceAppWidget() {
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val db = (context.applicationContext as RutinaApp).db
+        val wid = GlanceAppWidgetManager(context).getAppWidgetId(id)
+        val t0 = WidgetConfig.get(context, wid, "tag", "")
+        val initial = WidgetData.journal(db, t0.toLongOrNull()).first()
+        provideContent {
+            val tag by remember { WidgetConfig.flow(context, wid, "tag", "") }.collectAsState(t0)
+            val data by remember(tag) { WidgetData.journal(db, tag.toLongOrNull()) }.collectAsState(initial)
+            JournalContent(data)
+        }
+    }
+}
+
+class JournalWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = JournalWidget()
+}
+
+@Composable
+private fun JournalContent(d: WJournal) {
+    val open = actionStartActivity(
+        android.content.Intent().setClassName("com.rutina.app", "com.rutina.app.MainActivity")
+            .putExtra(MainActivity.EXTRA_NEW_NOTE, d.habitId ?: -1L)
+    )
+    Column(
+        GlanceModifier.fillMaxSize().background(Bg).cornerRadius(20.dp).padding(12.dp).clickable(open),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Nueva nota ✎", style = TextStyle(color = White, fontSize = 15.sp, fontWeight = FontWeight.Bold))
+        Spacer(GlanceModifier.height(8.dp))
+        Box(
+            GlanceModifier.fillMaxWidth().cornerRadius(10.dp).background(Color(d.tagColor ?: 0xFFB39DDB.toInt())).padding(8.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text(d.tag, maxLines = 1, style = TextStyle(color = Black, fontSize = 13.sp, fontWeight = FontWeight.Medium)) }
+        Spacer(GlanceModifier.height(6.dp))
+        Column(
+            GlanceModifier.fillMaxWidth().cornerRadius(10.dp).background(RowBg).padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale("es", "MX"))).replace(".", ""),
+                style = TextStyle(color = White, fontSize = 12.sp),
+            )
+            Text("${d.wordsToday} ${if (d.wordsToday == 1) "palabra" else "palabras"} hoy", style = TextStyle(color = Dim, fontSize = 12.sp))
         }
     }
 }

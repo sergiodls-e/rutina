@@ -1,5 +1,7 @@
 package com.rutina.app.ui.journal
 
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -197,6 +199,34 @@ fun NoteEditorScreen(vm: NoteEditorViewModel, onClose: () -> Unit) {
     val loaded by vm.loaded.collectAsStateWithLifecycle()
     val habits by vm.habits.collectAsStateWithLifecycle()
     var text by remember { mutableStateOf(TextFieldValue("")) }
+    // Deshacer / rehacer: se guarda un paso cada vez que haces una pausa al escribir.
+    val undoStack = remember { androidx.compose.runtime.mutableStateListOf<TextFieldValue>() }
+    val redoStack = remember { androidx.compose.runtime.mutableStateListOf<TextFieldValue>() }
+    var lastPush by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    fun edit(new: TextFieldValue, force: Boolean = false) {
+        if (new.text != text.text) {
+            val now = System.currentTimeMillis()
+            if (force || undoStack.isEmpty() || now - lastPush > 700) {
+                undoStack.add(text)
+                if (undoStack.size > 200) undoStack.removeAt(0)
+                lastPush = now
+            }
+            redoStack.clear()
+        }
+        text = new
+    }
+    fun undo() {
+        if (undoStack.isEmpty()) return
+        redoStack.add(text)
+        text = undoStack.removeAt(undoStack.lastIndex)
+        lastPush = 0L
+    }
+    fun redo() {
+        if (redoStack.isEmpty()) return
+        undoStack.add(text)
+        text = redoStack.removeAt(redoStack.lastIndex)
+        lastPush = 0L
+    }
     var pickDate by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf<LocalDate?>(null) }
     var tagMenu by remember { mutableStateOf(false) }
@@ -238,13 +268,19 @@ fun NoteEditorScreen(vm: NoteEditorViewModel, onClose: () -> Unit) {
                     .horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ToolButton(Icons.Filled.FormatBold, "Negrita") { text = wrap(text, "**") }
-                ToolButton(Icons.Filled.FormatItalic, "Cursiva") { text = wrap(text, "_") }
-                ToolButton(Icons.Filled.FormatStrikethrough, "Tachado") { text = wrap(text, "~~") }
-                ToolButton(Icons.Filled.BorderColor, "Resaltar") { text = wrap(text, "==") }
-                ToolButton(Icons.Filled.Title, "Título") { text = togglePrefix(text, "# ") }
-                ToolButton(Icons.Filled.FormatListBulleted, "Lista") { text = togglePrefix(text, "- ") }
-                ToolButton(Icons.Filled.CheckBox, "Casilla") { text = togglePrefix(text, "[ ] ") }
+                IconButton(onClick = { undo() }, enabled = undoStack.isNotEmpty()) {
+                    Icon(Icons.AutoMirrored.Filled.Undo, "Deshacer")
+                }
+                IconButton(onClick = { redo() }, enabled = redoStack.isNotEmpty()) {
+                    Icon(Icons.AutoMirrored.Filled.Redo, "Rehacer")
+                }
+                ToolButton(Icons.Filled.FormatBold, "Negrita") { edit(wrap(text, "**"), force = true) }
+                ToolButton(Icons.Filled.FormatItalic, "Cursiva") { edit(wrap(text, "_"), force = true) }
+                ToolButton(Icons.Filled.FormatStrikethrough, "Tachado") { edit(wrap(text, "~~"), force = true) }
+                ToolButton(Icons.Filled.BorderColor, "Resaltar") { edit(wrap(text, "=="), force = true) }
+                ToolButton(Icons.Filled.Title, "Título") { edit(togglePrefix(text, "# "), force = true) }
+                ToolButton(Icons.Filled.FormatListBulleted, "Lista") { edit(togglePrefix(text, "- "), force = true) }
+                ToolButton(Icons.Filled.CheckBox, "Casilla") { edit(togglePrefix(text, "[ ] "), force = true) }
             }
         },
     ) { pad ->
@@ -278,7 +314,7 @@ fun NoteEditorScreen(vm: NoteEditorViewModel, onClose: () -> Unit) {
             }
             TextField(
                 value = text,
-                onValueChange = { text = continueList(text, it) },
+                onValueChange = { edit(continueList(text, it)) },
                 placeholder = { Text("Escribe aquí…") },
                 visualTransformation = transformation,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),

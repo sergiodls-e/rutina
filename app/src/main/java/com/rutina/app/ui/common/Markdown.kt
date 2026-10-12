@@ -91,7 +91,31 @@ private fun findClose(text: String, m: String, from: Int, lineEnd: Int): Int {
 }
 
 /** Texto de una línea con el formato aplicado y las marcas ocultas. */
-fun renderInline(line: String): AnnotatedString {
+private val urlRegex = Regex("(https?://|www\\.)[^\\s]+")
+
+/** Vuelve tocables los enlaces (se abren en tu navegador; Rutina no se conecta). */
+private fun withLinks(a: AnnotatedString): AnnotatedString {
+    val found = urlRegex.findAll(a.text).toList()
+    if (found.isEmpty()) return a
+    return buildAnnotatedString {
+        append(a)
+        found.forEach { m ->
+            val url = m.value.trimEnd('.', ',', ')', ';')
+            val target = if (url.startsWith("www.")) "https://$url" else url
+            addLink(
+                androidx.compose.ui.text.LinkAnnotation.Url(
+                    target,
+                    androidx.compose.ui.text.TextLinkStyles(SpanStyle(color = Accent, textDecoration = TextDecoration.Underline)),
+                ),
+                m.range.first, m.range.first + url.length,
+            )
+        }
+    }
+}
+
+fun renderInline(line: String): AnnotatedString = withLinks(renderInlinePlain(line))
+
+private fun renderInlinePlain(line: String): AnnotatedString {
     val spans = findSpans(line)
     if (spans.isEmpty()) return AnnotatedString(line)
     val skip = BooleanArray(line.length)
@@ -126,6 +150,9 @@ class MarkdownTransformation(private val markerColor: Color) : VisualTransformat
                 addStyle(s.style, s.start, s.end + s.len)
                 addStyle(marker, s.start, s.start + s.len)
                 addStyle(marker, s.end, s.end + s.len)
+            }
+            urlRegex.findAll(raw).forEach { m ->
+                addStyle(SpanStyle(color = Accent, textDecoration = TextDecoration.Underline), m.range.first, m.range.last + 1)
             }
             var lineStart = 0
             raw.split('\n').forEach { line ->

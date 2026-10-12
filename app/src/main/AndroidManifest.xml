@@ -118,6 +118,40 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_tasks_info" />
         </receiver>
+        <receiver
+            android:name=".widget.HabitReportWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_report">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_report_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.JournalWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_journal">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_journal_info" />
+        </receiver>
+
+        <!-- Elegir qué muestra cada widget -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Rutina">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- Comparte el archivo del respaldo con Drive (u otra app) solo cuando tú lo pides. -->
         <provider
             android:name="androidx.core.content.FileProvider"
