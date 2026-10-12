@@ -118,6 +118,7 @@ fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
     var pickDate by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val askNotif = com.rutina.app.ui.common.rememberNotificationPermission()
 
     Scaffold(
         topBar = {
@@ -219,13 +220,14 @@ fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
             FormRow("Notificación") {
                 Switch(
                     checked = t.notify,
-                    onCheckedChange = { on -> vm.update { it.copy(notify = on) } },
+                    onCheckedChange = { on -> if (on) askNotif(); vm.update { it.copy(notify = on) } },
                     enabled = t.dueEpochDay != null && t.dueMinutes != null,
                 )
             }
             Text(
                 if (t.dueEpochDay == null || t.dueMinutes == null) "Para avisarte, la tarea necesita fecha y hora."
-                else "Los avisos se activan en la Fase 7; la preferencia ya queda guardada.",
+                else if (t.notify) "Te avisaremos a la hora de la tarea, con un botón para completarla."
+                else "Activa para recibir un aviso a la hora de la tarea.",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )

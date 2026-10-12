@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Rutina</string>
+    <string name="widget_habits">Hábitos de hoy</string>
+    <string name="widget_habits_desc">Consulta y registra tus hábitos de hoy</string>
+    <string name="widget_tasks">Tareas</string>
+    <string name="widget_tasks_desc">Consulta y completa tus tareas pendientes</string>
 </resources>

@@ -140,3 +140,18 @@ interface TimerDao {
     @Query("SELECT * FROM timer_sessions ORDER BY start DESC")
     fun observeAll(): Flow<List<TimerSession>>
 }
+
+@Dao
+interface ReminderDao {
+    @Query("SELECT * FROM habit_reminders ORDER BY minutes")
+    fun observeAll(): Flow<List<HabitReminder>>
+
+    @Query("SELECT * FROM habit_reminders WHERE habitId = :habitId ORDER BY minutes")
+    suspend fun forHabit(habitId: Long): List<HabitReminder>
+
+    @Query("DELETE FROM habit_reminders WHERE habitId = :habitId")
+    suspend fun deleteFor(habitId: Long)
+
+    @Insert
+    suspend fun insertAll(list: List<HabitReminder>)
+}

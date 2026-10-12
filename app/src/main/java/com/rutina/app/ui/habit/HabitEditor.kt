@@ -79,6 +79,7 @@ import com.rutina.app.data.AppDatabase
 import com.rutina.app.data.GoalPeriod
 import com.rutina.app.data.GoalType
 import com.rutina.app.data.Habit
+import com.rutina.app.data.HabitReminder
 import com.rutina.app.data.ScheduleType
 import com.rutina.app.data.TrackingType
 import com.rutina.app.domain.HabitLogic
@@ -117,10 +118,20 @@ class HabitEditorViewModel(
     private val _logCount = MutableStateFlow(0)
     val logCount: StateFlow<Int> = _logCount
 
+    private val _reminders = MutableStateFlow<List<HabitReminder>>(emptyList())
+    val reminders: StateFlow<List<HabitReminder>> = _reminders
+
+    fun addReminder(minutes: Int, days: Int) {
+        _reminders.value = (_reminders.value + HabitReminder(habitId = editId, minutes = minutes, days = days)).sortedBy { it.minutes }
+    }
+
+    fun removeReminder(r: HabitReminder) { _reminders.value = _reminders.value - r }
+
     init {
         if (isEdit) viewModelScope.launch {
             db.habits().get(editId)?.let { _habit.value = it; originalType = it.type }
             _logCount.value = db.habits().countLogs(editId)
+            _reminders.value = db.reminders().forHabit(editId)
         }
     }
 
@@ -146,7 +157,9 @@ class HabitEditorViewModel(
             // El historial empieza cuando lo dejaste (puede ser antes de crear el hábito).
             h = h.copy(quitSince = since, createdAt = if (!isEdit || fresh) minOf(h.createdAt, since) else h.createdAt)
         }
-        if (isEdit) db.habits().update(h) else db.habits().insert(h)
+        val id = if (isEdit) { db.habits().update(h); h.id } else db.habits().insert(h)
+        db.reminders().deleteFor(id)
+        db.reminders().insertAll(_reminders.value.map { it.copy(id = 0, habitId = id) })
         onDone()
     }
 
@@ -394,6 +407,8 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                 )
             }
 
+            RemindersSection(vm, color)
+
             if (vm.isEdit) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                 Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -535,5 +550,78 @@ private fun ScheduleOption(label: String, selected: Boolean, onClick: () -> Unit
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
         RadioButton(selected = selected, onClick = onClick)
         Text(label, color = if (selected) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// ---------------------------------------------------------------- Recordatorios
+
+private val reminderDayLetters = listOf("L", "M", "X", "J", "V", "S", "D")
+
+private fun daysLabel(days: Int): String = when (days) {
+    0b1111111 -> "Todos los días"
+    0b0011111 -> "Entre semana"
+    0b1100000 -> "Fines de semana"
+    else -> reminderDayLetters.filterIndexed { i, _ -> days and (1 shl i) != 0 }.joinToString(" ")
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RemindersSection(vm: HabitEditorViewModel, color: Color) {
+    val reminders by vm.reminders.collectAsStateWithLifecycle()
+    val askNotif = com.rutina.app.ui.common.rememberNotificationPermission()
+    var adding by remember { mutableStateOf(false) }
+
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Recordatorios", fontWeight = FontWeight.Bold)
+        if (reminders.isEmpty()) {
+            Text("Este hábito no tiene recordatorios", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        }
+        reminders.forEach { r ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(start = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+                    Text(com.rutina.app.domain.TaskLogic.timeLabel(r.minutes), fontWeight = FontWeight.Medium)
+                    Text(daysLabel(r.days), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = { vm.removeReminder(r) }) { Icon(Icons.Filled.Close, "Quitar recordatorio") }
+            }
+        }
+        TextButton(onClick = { askNotif(); adding = true }) { Text("+ Añadir recordatorio") }
+    }
+
+    if (adding) {
+        val st = androidx.compose.material3.rememberTimePickerState(initialHour = 9, initialMinute = 0, is24Hour = false)
+        var days by remember { mutableStateOf(0b1111111) }
+        AlertDialog(
+            onDismissRequest = { adding = false },
+            title = { Text("Nuevo recordatorio") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    androidx.compose.material3.TimePicker(state = st)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        reminderDayLetters.forEachIndexed { i, l ->
+                            val on = days and (1 shl i) != 0
+                            Box(
+                                Modifier.size(34.dp).clip(CircleShape)
+                                    .background(if (on) color else MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { days = days xor (1 shl i) },
+                                contentAlignment = Alignment.Center,
+                            ) { Text(l, color = if (on) Color.Black else Color.White) }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = days != 0,
+                    onClick = { vm.addReminder(st.hour * 60 + st.minute, days); adding = false },
+                ) { Text("Añadir") }
+            },
+            dismissButton = { TextButton(onClick = { adding = false }) { Text("Cancelar") } },
+        )
     }
 }

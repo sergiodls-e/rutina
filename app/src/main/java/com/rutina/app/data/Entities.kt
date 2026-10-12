@@ -133,3 +133,23 @@ data class TaskFilter(
     val includeDone: Boolean = false,
     val sortOrder: Int = 0,
 )
+
+/** Recordatorio de un hábito: una hora y los días en que suena. */
+@Entity(
+    tableName = "habit_reminders",
+    foreignKeys = [ForeignKey(
+        entity = Habit::class,
+        parentColumns = ["id"],
+        childColumns = ["habitId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index("habitId")],
+)
+data class HabitReminder(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val habitId: Long,
+    /** Minutos desde medianoche. */
+    val minutes: Int,
+    /** Bits 0..6 = lunes..domingo (ISO). */
+    val days: Int = 0b1111111,
+)

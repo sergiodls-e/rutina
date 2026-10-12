@@ -10,9 +10,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [
         Habit::class, HabitLog::class, Task::class, TaskList::class,
-        Note::class, TimerSession::class, TaskFilter::class,
+        Note::class, TimerSession::class, TaskFilter::class, HabitReminder::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -20,6 +20,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun tasks(): TaskDao
     abstract fun notes(): NoteDao
     abstract fun timers(): TimerDao
+    abstract fun reminders(): ReminderDao
 
     companion object {
         /** v1 → v2: agrega la tabla de filtros de tareas. Conserva todos tus datos. */
@@ -59,9 +60,24 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4 → v5: recordatorios de hábitos. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `habit_reminders` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`habitId` INTEGER NOT NULL, " +
+                        "`minutes` INTEGER NOT NULL, " +
+                        "`days` INTEGER NOT NULL, " +
+                        "FOREIGN KEY(`habitId`) REFERENCES `habits`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_habit_reminders_habitId` ON `habit_reminders` (`habitId`)")
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "rutina.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

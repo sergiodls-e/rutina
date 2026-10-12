@@ -26,6 +26,6 @@ app/src/main/java/com/rutina/app/
 4. ✅ Temporizador
 5. ✅ Vistas semanal/mensual/anual y estadísticas
 6. ✅ Calendario
-7. Recordatorios y widgets
+7. ✅ Recordatorios y widgets
 8. Estado de ánimo, peso y Health Connect
 9. Exportar/importar, cifrado y ajustes

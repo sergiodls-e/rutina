@@ -3,7 +3,16 @@ package com.rutina.app
 import android.app.Application
 import com.rutina.app.data.AppDatabase
 import com.rutina.app.data.Prefs
+import com.rutina.app.reminders.ReminderScheduler
 import com.rutina.app.timer.TimerController
+import com.rutina.app.widget.Widgets
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 
 class RutinaApp : Application() {
     /** Única instancia de la base de datos local (inyección manual, sin librerías extra). */
@@ -14,4 +23,27 @@ class RutinaApp : Application() {
 
     /** Temporizador compartido por la pantalla, la notificación y la alarma. */
     val timer: TimerController by lazy { TimerController(this, db) }
+
+    /** Avisos de tareas y recordatorios de hábitos. */
+    val reminders: ReminderScheduler by lazy { ReminderScheduler(this, db) }
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onCreate() {
+        super.onCreate()
+        // Cada vez que cambian tus datos: reprogramar avisos y refrescar widgets.
+        appScope.launch {
+            combine(
+                db.tasks().observeAll(),
+                db.reminders().observeAll(),
+                db.habits().observeAll(),
+                db.habits().observeAllLogs(),
+                db.notes().observeAll(),
+            ) { _, _, _, _, _ -> Unit }.collectLatest {
+                delay(800)
+                runCatching { reminders.reschedule() }
+                Widgets.refresh(this@RutinaApp)
+            }
+        }
+    }
 }

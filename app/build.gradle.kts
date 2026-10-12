@@ -73,6 +73,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
+    // Widgets de pantalla de inicio
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+
     val room = "2.6.1"
     implementation("androidx.room:room-runtime:$room")
     implementation("androidx.room:room-ktx:$room")
