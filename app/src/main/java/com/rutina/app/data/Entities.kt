@@ -1,0 +1,114 @@
+package com.rutina.app.data
+
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+/** Cómo se registra un hábito. */
+enum class TrackingType { COUNT, QUIT, MOOD, WEIGHT, HEALTH, JOURNAL }
+
+/** Positivo = llegar a la meta; Negativo = no pasarse; Ninguno = solo registrar. */
+enum class GoalType { POSITIVE, NEGATIVE, NONE }
+
+enum class GoalPeriod { DAY, WEEK, MONTH }
+
+/** Qué días toca el hábito. */
+enum class ScheduleType { ALL_DAYS, SPECIFIC_DAYS, DAYS_PER_WEEK }
+
+enum class RepeatRule { NEVER, DAILY, WEEKDAYS, WEEKLY, MONTHLY, YEARLY }
+
+@Entity(tableName = "habits")
+data class Habit(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val color: Int,
+    val type: TrackingType = TrackingType.COUNT,
+    val goalType: GoalType = GoalType.POSITIVE,
+    val target: Double = 1.0,
+    val unit: String = "vez",
+    val period: GoalPeriod = GoalPeriod.DAY,
+    val scheduleType: ScheduleType = ScheduleType.ALL_DAYS,
+    /** Bits 0..6 = lunes..domingo (ISO). */
+    val scheduleDays: Int = 0b1111111,
+    val daysPerWeek: Int = 7,
+    /** Para hábitos de tipo QUIT: momento desde el que cuenta. */
+    val quitSince: Long? = null,
+    val archived: Boolean = false,
+    val sortOrder: Int = 0,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Entity(
+    tableName = "habit_logs",
+    foreignKeys = [ForeignKey(
+        entity = Habit::class,
+        parentColumns = ["id"],
+        childColumns = ["habitId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index("habitId"), Index("timestamp")],
+)
+data class HabitLog(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val habitId: Long,
+    val timestamp: Long,
+    val value: Double = 1.0,
+    val note: String? = null,
+)
+
+@Entity(tableName = "task_lists")
+data class TaskList(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val color: Int,
+    val sortOrder: Int = 0,
+)
+
+@Entity(
+    tableName = "tasks",
+    foreignKeys = [ForeignKey(
+        entity = TaskList::class,
+        parentColumns = ["id"],
+        childColumns = ["listId"],
+        onDelete = ForeignKey.SET_NULL,
+    )],
+    indices = [Index("listId"), Index("dueEpochDay")],
+)
+data class Task(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val description: String = "",
+    /** LocalDate.toEpochDay(); null = sin fecha. */
+    val dueEpochDay: Long? = null,
+    /** Minutos desde medianoche; null = sin hora. */
+    val dueMinutes: Int? = null,
+    val repeat: RepeatRule = RepeatRule.NEVER,
+    val notify: Boolean = false,
+    /** 0 = ninguna, 1 baja, 2 media, 3 alta. */
+    val priority: Int = 0,
+    val listId: Long? = null,
+    val done: Boolean = false,
+    val doneAt: Long? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Entity(tableName = "notes", indices = [Index("timestamp"), Index("habitId"), Index("taskId")])
+data class Note(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val content: String,
+    val habitId: Long? = null,
+    val taskId: Long? = null,
+    val starred: Boolean = false,
+)
+
+@Entity(tableName = "timer_sessions", indices = [Index("habitId")])
+data class TimerSession(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val habitId: Long? = null,
+    val start: Long,
+    val end: Long,
+    val activeMillis: Long,
+    val countdown: Boolean,
+)
