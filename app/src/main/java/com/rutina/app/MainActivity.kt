@@ -8,6 +8,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.rutina.app.ui.timer.TimerScreen
+import com.rutina.app.ui.calendar.CalendarScreen
+import com.rutina.app.ui.calendar.CalendarViewModel
 import com.rutina.app.ui.stats.HabitStatsScreen
 import com.rutina.app.ui.stats.HabitStatsViewModel
 import com.rutina.app.ui.stats.StatsScreen
@@ -93,9 +95,14 @@ class MainActivity : ComponentActivity() {
                     composable("main") {
                         val todayVm: TodayViewModel = viewModel { TodayViewModel(db, app.prefs) }
                         val journalVm: JournalViewModel = viewModel { JournalViewModel(db) }
+                        val calendarVm: CalendarViewModel = viewModel { CalendarViewModel(db, app.prefs) }
                         MainTabs(
                             todayVm = todayVm,
                             journalVm = journalVm,
+                            calendarVm = calendarVm,
+                            onCreateTaskAt = { day, min ->
+                                nav.navigate("task/form?day=${day.toEpochDay()}&min=${min ?: -1}")
+                            },
                             onNewNote = { habitId -> nav.navigate("note/form?habit=${habitId ?: -1L}") },
                             onEditNote = { id -> nav.navigate("note/form?id=$id") },
                             onNewHabit = { nav.navigate("habit/suggest") },
@@ -129,12 +136,13 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable(
-                        "task/form?id={id}&title={title}&list={list}&day={day}",
+                        "task/form?id={id}&title={title}&list={list}&day={day}&min={min}",
                         arguments = listOf(
                             navArgument("id") { type = NavType.LongType; defaultValue = 0L },
                             navArgument("title") { type = NavType.StringType; defaultValue = "" },
                             navArgument("list") { type = NavType.LongType; defaultValue = -1L },
                             navArgument("day") { type = NavType.LongType; defaultValue = Long.MIN_VALUE },
+                            navArgument("min") { type = NavType.IntType; defaultValue = -1 },
                         ),
                     ) { entry ->
                         val a = entry.arguments
@@ -143,6 +151,7 @@ class MainActivity : ComponentActivity() {
                             title = a?.getString("title").orEmpty(),
                             listId = a?.getLong("list")?.takeIf { it > 0 },
                             dueEpochDay = a?.getLong("day")?.takeIf { it != Long.MIN_VALUE },
+                            dueMinutes = a?.getInt("min")?.takeIf { it >= 0 },
                         )
                         val vm: TaskEditorViewModel = viewModel { TaskEditorViewModel(db, id, initial) }
                         TaskEditorScreen(vm, onClose = { nav.popBackStack() })
@@ -212,6 +221,8 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 private fun MainTabs(
     todayVm: TodayViewModel,
     journalVm: JournalViewModel,
+    calendarVm: CalendarViewModel,
+    onCreateTaskAt: (java.time.LocalDate, Int?) -> Unit,
     onNewNote: (habitId: Long?) -> Unit,
     onEditNote: (Long) -> Unit,
     onNewHabit: () -> Unit,
@@ -258,7 +269,12 @@ private fun MainTabs(
                     onEditNote = onEditNote,
                     onOpenTask = onEditTask,
                 )
-                Tab.CALENDAR -> ComingSoon("Calendario", "Llega en la Fase 6: vista semanal por horas y programar tareas.")
+                Tab.CALENDAR -> CalendarScreen(
+                    calendarVm,
+                    onOpenTask = onEditTask,
+                    onCreateAt = onCreateTaskAt,
+                    onHabitStats = onHabitStats,
+                )
                 Tab.SETTINGS -> ComingSoon(
                     "Ajustes",
                     "Llega en la Fase 9: tema, inicio de semana, exportar/importar respaldo y borrar datos.\n\n" +

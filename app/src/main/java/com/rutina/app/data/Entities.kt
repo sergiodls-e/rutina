@@ -1,5 +1,6 @@
 package com.rutina.app.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -88,6 +89,8 @@ data class Task(
     val dueMinutes: Int? = null,
     val repeat: RepeatRule = RepeatRule.NEVER,
     val notify: Boolean = false,
+    /** Duración en minutos (para el calendario). */
+    @ColumnInfo(defaultValue = "30") val durationMin: Int = 30,
     /** 0 = ninguna, 1 baja, 2 media, 3 alta. */
     val priority: Int = 0,
     val listId: Long? = null,

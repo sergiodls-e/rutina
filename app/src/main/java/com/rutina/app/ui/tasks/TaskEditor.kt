@@ -180,6 +180,14 @@ fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
                     if (pick) pickTime = true else vm.update { it.copy(dueMinutes = null) }
                 }
             }
+            if (t.dueMinutes != null) {
+                FormRow("Duración") {
+                    Dropdown(
+                        current = durationLabel(t.durationMin),
+                        options = listOf(15, 30, 45, 60, 90, 120, 180, 240).map { durationLabel(it) to it },
+                    ) { m -> vm.update { it.copy(durationMin = m) } }
+                }
+            }
             FormRow("Repetir") {
                 Dropdown(
                     current = TaskLogic.repeatLabel(t.repeat),
@@ -272,4 +280,10 @@ fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } },
         )
     }
+}
+
+private fun durationLabel(m: Int): String = when {
+    m < 60 -> "$m min"
+    m % 60 == 0 -> "${m / 60} h"
+    else -> "${m / 60} h ${m % 60} min"
 }
