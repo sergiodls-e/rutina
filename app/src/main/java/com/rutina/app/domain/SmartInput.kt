@@ -138,7 +138,9 @@ object SmartInput {
         if (minutes == null) find(reTime) { m ->
             val prefix = m.groupValues[1].isNotEmpty()
             val hasMin = m.groupValues[3].isNotEmpty()
-            val suffix = m.groupValues[4].isNotEmpty() || m.groupValues[5].isNotEmpty()
+            // "h"/"hrs" solas no bastan ("Leer 2 h" es duración, no hora): se piden a. m./p. m. o "de la tarde"…
+            val ap = m.groupValues[4].lowercase().replace(".", "").replace(" ", "")
+            val suffix = ap == "am" || ap == "pm" || m.groupValues[5].isNotEmpty()
             val h = m.groupValues[2].toInt()
             val mm = m.groupValues[3].toIntOrNull() ?: 0
             (prefix || hasMin || suffix) && h in 0..23 && mm in 0..59

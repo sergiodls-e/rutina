@@ -276,7 +276,7 @@ class HabitReportWidget : GlanceAppWidget() {
             val hid by remember { WidgetConfig.flow(context, wid, "habit", "") }.collectAsState(h0)
             val hist by remember { WidgetConfig.flow(context, wid, "history", "1") }.collectAsState(s0)
             val data by remember(hid, hist) { WidgetData.report(db, hid.toLongOrNull(), hist == "1") }.collectAsState(initial)
-            ReportContent(data)
+            ReportContent(data, wid)
         }
     }
 }
@@ -286,13 +286,18 @@ class HabitReportWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 @Composable
-private fun ReportContent(d: WReport) {
+private fun ReportContent(d: WReport, wid: Int) {
     val h = d.habit
     Column(GlanceModifier.fillMaxSize().background(Bg).cornerRadius(20.dp).padding(10.dp)) {
         if (h == null) {
+            // Toca para elegir el hábito (en Android 11 o anterior no existe "Configurar" al mantener pulsado).
+            val configure = actionStartActivity(
+                android.content.Intent().setClassName("com.rutina.app", "com.rutina.app.widget.WidgetConfigActivity")
+                    .putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, wid)
+            )
             Text(
-                "Mantén pulsado el widget y elige un hábito",
-                modifier = GlanceModifier.padding(6.dp).clickable(actionStartActivity<MainActivity>()),
+                "Toca aquí para elegir un hábito",
+                modifier = GlanceModifier.padding(6.dp).clickable(configure),
                 style = TextStyle(color = Dim, fontSize = 13.sp),
             )
         } else ReportBody(h, d)
