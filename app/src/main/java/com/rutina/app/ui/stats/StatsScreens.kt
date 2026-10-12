@@ -57,6 +57,10 @@ import com.rutina.app.data.TrackingType
 import com.rutina.app.domain.HabitLogic
 import com.rutina.app.domain.HabitStats
 import com.rutina.app.ui.common.BarChart
+import com.rutina.app.ui.common.LineChart
+import com.rutina.app.domain.ChartPoint
+import com.rutina.app.domain.Mood
+import com.rutina.app.domain.Weight
 import com.rutina.app.ui.common.CellLegend
 import com.rutina.app.ui.common.MonthGrid
 import com.rutina.app.ui.common.YearHeatmap
@@ -192,7 +196,9 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (h.type == TrackingType.QUIT && s.quit != null) QuitHeader(h, s.quit!!)
-            s.summary?.let { sm ->
+            if (h.type == TrackingType.MOOD) MoodStats(h, s)
+            if (h.type == TrackingType.WEIGHT) WeightStats(h, s, color)
+            s.summary?.takeIf { h.type != TrackingType.MOOD && h.type != TrackingType.WEIGHT }?.let { sm ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Tile("Racha actual", "${sm.current}", sm.streakUnit, Modifier.weight(1f), accent = if (sm.current > 0) Streak else null)
                     Tile("Mejor racha", "${sm.best}", sm.streakUnit, Modifier.weight(1f))
@@ -226,12 +232,12 @@ fun HabitStatsScreen(vm: HabitStatsViewModel, onClose: () -> Unit, onEdit: (Long
                 else CellLegend(color, showFail = h.goalType == GoalType.NEGATIVE)
             }
 
-            if (s.chart.isNotEmpty()) {
-                Section(HabitStats.chartTitle(h)) {
+            if (s.chart.isNotEmpty() && h.type != TrackingType.WEIGHT) {
+                Section(if (h.type == TrackingType.MOOD) "Ánimo promedio · ${HabitStats.chartTitle(h).lowercase()}" else HabitStats.chartTitle(h)) {
                     BarChart(
                         s.chart, color,
-                        target = h.target.takeIf { h.goalType != GoalType.NONE },
-                        valueLabel = { HabitLogic.amountLabel(it, h.unit) },
+                        target = h.target.takeIf { h.goalType != GoalType.NONE && h.type != TrackingType.MOOD },
+                        valueLabel = { if (h.type == TrackingType.MOOD) (if (it > 0) Mood.label(it) else "Sin registro") else HabitLogic.amountLabel(it, h.unit) },
                     )
                 }
             }
@@ -304,5 +310,84 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
     ) {
         Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         content()
+    }
+}
+
+// ---------------------------------------------------------------- Ánimo y peso
+
+@Composable
+private fun MoodStats(h: Habit, s: HabitDetail) {
+    val today = LocalDate.now()
+    val last30 = s.totals.filterKeys { it > today.minusDays(30) }.values
+    val avg30 = last30.takeIf { it.isNotEmpty() }?.average()
+    val counts = Mood.levels.associateWith { lv -> s.logs.count { Mood.level(it.value).value == lv.value } }
+    val top = counts.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Tile("Promedio 30 días", avg30?.let { Mood.level(it).emoji } ?: "—", avg30?.let { "${Mood.level(it).label} · ${Mood.percent(it)} %" } ?: "Sin registros", Modifier.weight(1f))
+        Tile("Más frecuente", top?.emoji ?: "—", top?.label ?: "", Modifier.weight(1f))
+        Tile("Días registrados", "${s.totals.size}", "racha ${s.summary?.current ?: 0}", Modifier.weight(1f))
+    }
+    Section("Distribución") {
+        val total = counts.values.sum().coerceAtLeast(1)
+        Mood.levels.reversed().forEach { lv ->
+            val n = counts[lv] ?: 0
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(lv.emoji, fontSize = 20.sp, modifier = Modifier.width(32.dp))
+                Text(lv.label, Modifier.width(72.dp), fontSize = 13.sp)
+                LinearProgressIndicator(
+                    progress = { n.toFloat() / total },
+                    color = Color(h.color), trackColor = Color(0xFF2E2E2E), strokeCap = StrokeCap.Round,
+                    modifier = Modifier.weight(1f).height(8.dp),
+                )
+                Text("$n", Modifier.width(36.dp), textAlign = TextAlign.End, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeightStats(h: Habit, s: HabitDetail, color: Color) {
+    val w = Weight.summary(s.logs)
+    val u = h.unit.ifBlank { "kg" }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Tile("Actual", w.current?.let(Weight::format) ?: "—", u, Modifier.weight(1f))
+        Tile(
+            "Cambio total",
+            if (w.current != null && w.first != null) Weight.delta(w.current - w.first) else "—",
+            "$u desde el inicio", Modifier.weight(1f),
+        )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Tile("Últimos 30 días", w.change30?.let(Weight::delta) ?: "—", u, Modifier.weight(1f))
+        val goal = h.target.takeIf { h.goalType != GoalType.NONE && it > 0 }
+        val remaining = if (goal != null && w.current != null) goal - w.current else null
+        val reached = remaining != null && when (h.goalType) {
+            GoalType.NEGATIVE -> remaining >= 0
+            GoalType.POSITIVE -> remaining <= 0
+            GoalType.NONE -> false
+        }
+        Tile(
+            "Meta",
+            when { goal == null -> "—"; reached -> "✓"; else -> Weight.format(kotlin.math.abs(remaining ?: 0.0)) },
+            when { goal == null -> "Sin meta"; reached -> "¡Alcanzada! (${Weight.format(goal)} $u)"; else -> "$u para llegar a ${Weight.format(goal)}" },
+            Modifier.weight(1f),
+        )
+    }
+    Section("Tendencia") {
+        val pts = s.logs.sortedBy { it.timestamp }.takeLast(60).map {
+            val d = HabitLogic.dateOf(it.timestamp)
+            ChartPoint("${d.dayOfMonth}/${d.monthValue}", it.value)
+        }
+        LineChart(
+            pts, color,
+            target = h.target.takeIf { h.goalType != GoalType.NONE && it > 0 },
+            valueLabel = { "${Weight.format(it)} $u" },
+        )
+        if (w.min != null && w.max != null) {
+            Text(
+                "Mínimo ${Weight.format(w.min)} · máximo ${Weight.format(w.max)} · ${w.entries} registros",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

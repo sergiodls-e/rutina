@@ -52,6 +52,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.SentimentSatisfied
+import androidx.compose.material.icons.filled.Sync
+import com.rutina.app.health.HealthStatus
+import com.rutina.app.ui.common.rememberHealthConnector
+import com.rutina.app.ui.habit.MoodDialog
+import com.rutina.app.ui.habit.WeightDialog
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarViewMonth
 import androidx.compose.material.icons.filled.GridOn
@@ -147,6 +154,9 @@ fun TodayScreen(
     var fabOpen by remember { mutableStateOf(false) }
     var showTaskSheet by remember { mutableStateOf(false) }
     var actionsFor by remember { mutableStateOf<HabitRow?>(null) }
+    var moodFor by remember { mutableStateOf<HabitRow?>(null) }
+    var weightFor by remember { mutableStateOf<HabitRow?>(null) }
+    val health = rememberHealthConnector()
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -262,6 +272,10 @@ fun TodayScreen(
                                             when (row.habit.type) {
                                                 TrackingType.QUIT -> actionsFor = row
                                                 TrackingType.JOURNAL -> onWriteNote(row.habit.id)
+                                                TrackingType.MOOD -> moodFor = row
+                                                TrackingType.WEIGHT -> weightFor = row
+                                                TrackingType.HEALTH ->
+                                                    if (health.status == HealthStatus.READY) health.sync() else health.connect()
                                                 else -> vm.add(row.habit)
                                             }
                                         },
@@ -323,7 +337,21 @@ fun TodayScreen(
             onReset = { vm.resetQuit(row.habit); actionsFor = null },
             onEdit = { actionsFor = null; onEditHabit(row.habit.id) },
             onStats = { actionsFor = null; onHabitStats(row.habit.id) },
+            onMood = { actionsFor = null; moodFor = row },
+            onWeight = { actionsFor = null; weightFor = row },
+            onSync = { actionsFor = null; if (health.status == HealthStatus.READY) health.sync() else health.connect() },
         )
+    }
+
+    moodFor?.let { row ->
+        MoodDialog(onDismiss = { moodFor = null }) { level, note -> vm.add(row.habit, level.toDouble(), note); moodFor = null }
+    }
+    weightFor?.let { row ->
+        WeightDialog(
+            unit = row.habit.unit,
+            last = row.totals.maxByOrNull { it.key }?.value,
+            onDismiss = { weightFor = null },
+        ) { kg -> vm.add(row.habit, kg); weightFor = null }
     }
 }
 
@@ -507,7 +535,7 @@ private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit, 
             Spacer(Modifier.weight(1f))
             Text(
                 if (isQuit) HabitLogic.formatElapsed(now - (h.quitSince ?: h.createdAt))
-                else HabitLogic.progressLabel(h, row.progress),
+                else row.label,
                 fontSize = 14.sp, textAlign = TextAlign.End, modifier = Modifier.widthIn(max = 140.dp),
             )
             Spacer(Modifier.width(8.dp))
@@ -524,6 +552,9 @@ private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit, 
                         isQuit -> Icons.Filled.Refresh
                         filled -> Icons.Filled.Check
                         h.type == TrackingType.JOURNAL -> Icons.Filled.EditNote
+                        h.type == TrackingType.MOOD -> Icons.Filled.SentimentSatisfied
+                        h.type == TrackingType.WEIGHT -> Icons.Filled.MonitorWeight
+                        h.type == TrackingType.HEALTH -> Icons.Filled.Sync
                         else -> Icons.Filled.Add
                     },
                     contentDescription = "Registrar",
@@ -673,6 +704,9 @@ private fun HabitActionsDialog(
     onReset: () -> Unit,
     onEdit: () -> Unit,
     onStats: () -> Unit,
+    onMood: () -> Unit,
+    onWeight: () -> Unit,
+    onSync: () -> Unit,
 ) {
     val h: Habit = row.habit
     var amount by remember { mutableStateOf("") }
@@ -685,6 +719,15 @@ private fun HabitActionsDialog(
                 when (h.type) {
                     TrackingType.QUIT ->
                         Text("¿Recaíste? Reiniciar pone el contador en cero y queda registrado en tu diario.")
+                    TrackingType.MOOD -> Text("Hoy: ${row.label}")
+                    TrackingType.WEIGHT -> Text("Último: ${row.label}")
+                    TrackingType.HEALTH -> {
+                        Text("Hoy: ${row.label}")
+                        Text(
+                            "Se lee de Health Connect al abrir la app. Toca Sincronizar para actualizar ahora.",
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     TrackingType.JOURNAL -> {
                         Text("Progreso: ${HabitLogic.progressLabel(h, row.progress)}")
                         Text(
@@ -721,6 +764,9 @@ private fun HabitActionsDialog(
                     TextButton(onClick = onReset) { Text("Reiniciar contador", color = MaterialTheme.colorScheme.error) }
                 TrackingType.JOURNAL ->
                     TextButton(onClick = onWrite) { Text("Escribir nota") }
+                TrackingType.MOOD -> TextButton(onClick = onMood) { Text("Registrar ánimo") }
+                TrackingType.WEIGHT -> TextButton(onClick = onWeight) { Text("Registrar peso") }
+                TrackingType.HEALTH -> TextButton(onClick = onSync) { Text("Sincronizar") }
                 else ->
                     TextButton(onClick = { onAdd(amount.toDoubleOrNull() ?: 1.0, note.trim().ifBlank { null }) }) {
                         Text(if (amount.isBlank()) "Añadir 1" else "Añadir")

@@ -93,11 +93,12 @@ fun stampLabel(millis: Long): String {
 /** Texto del registro de un hábito: "1 vez", "35 min", "Reinició el contador". */
 fun logLabel(habit: Habit, log: HabitLog): String = when (habit.type) {
     TrackingType.QUIT -> "Reinició el contador"
-    else -> HabitLogic.amountLabel(log.value, habit.unit)
+    else -> com.rutina.app.domain.valueLabel(habit, log.value)
 }
 
 /** Nota escrita por el usuario en un registro (la marca interna de reinicio no se muestra). */
-fun HabitLog.userNote(): String? = note?.takeIf { it.isNotBlank() && it != "reinicio" }
+fun HabitLog.userNote(): String? =
+    note?.takeIf { it.isNotBlank() && it != "reinicio" && it != com.rutina.app.health.HealthSync.NOTE }
 
 class JournalViewModel(private val db: AppDatabase) : ViewModel() {
 

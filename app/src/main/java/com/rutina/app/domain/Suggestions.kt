@@ -72,6 +72,20 @@ object Suggestions {
             Suggestion("Gratitud", c(3), type = TrackingType.JOURNAL, target = 30.0, unit = "palabras"),
             Suggestion("Diario de sueños", c(8), type = TrackingType.JOURNAL, target = 50.0, unit = "palabras"),
         )),
+        SuggestionGroup("Estado de ánimo", listOf(
+            Suggestion("Estado de ánimo", c(6), type = TrackingType.MOOD, goalType = GoalType.NONE, unit = ""),
+            Suggestion("¿Cómo dormí?", c(7), type = TrackingType.MOOD, goalType = GoalType.NONE, unit = ""),
+        )),
+        SuggestionGroup("Peso corporal", listOf(
+            Suggestion("Peso corporal", c(1), type = TrackingType.WEIGHT, goalType = GoalType.NONE, target = 0.0, unit = "kg"),
+        )),
+        SuggestionGroup("Health Connect", listOf(
+            Suggestion("Pasos", c(6), type = TrackingType.HEALTH, target = 10_000.0, unit = "pasos"),
+            Suggestion("Distancia recorrida", c(4), type = TrackingType.HEALTH, target = 5.0, unit = "km"),
+            Suggestion("Calorías activas", c(1), type = TrackingType.HEALTH, target = 400.0, unit = "kcal"),
+            Suggestion("Pisos subidos", c(7), type = TrackingType.HEALTH, target = 10.0, unit = "pisos"),
+            Suggestion("Minutos de ejercicio", c(0), type = TrackingType.HEALTH, target = 30.0, unit = "min de ejercicio"),
+        )),
         SuggestionGroup("Dejar", listOf(
             Suggestion("Dejar de fumar", c(9), type = TrackingType.QUIT, goalType = GoalType.NONE),
             Suggestion("Dejar de beber", c(0), type = TrackingType.QUIT, goalType = GoalType.NONE),

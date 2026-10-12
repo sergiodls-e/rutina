@@ -3,6 +3,7 @@ package com.rutina.app
 import android.app.Application
 import com.rutina.app.data.AppDatabase
 import com.rutina.app.data.Prefs
+import com.rutina.app.health.HealthSync
 import com.rutina.app.reminders.ReminderScheduler
 import com.rutina.app.timer.TimerController
 import com.rutina.app.widget.Widgets
@@ -23,6 +24,9 @@ class RutinaApp : Application() {
 
     /** Temporizador compartido por la pantalla, la notificación y la alarma. */
     val timer: TimerController by lazy { TimerController(this, db) }
+
+    /** Lectura de Health Connect (pasos, distancia, etc.). */
+    val health: HealthSync by lazy { HealthSync(this, db) }
 
     /** Avisos de tareas y recordatorios de hábitos. */
     val reminders: ReminderScheduler by lazy { ReminderScheduler(this, db) }

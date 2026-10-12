@@ -165,10 +165,17 @@ class ReminderScheduler(private val app: Context, private val db: AppDatabase) {
         val logs = db.habits().observeLogsFor(h.id).first()
         val progress = HabitLogic.progress(h, logs, today, DayOfWeek.SUNDAY)
         // Si ya cumpliste la meta positiva de hoy, no hace falta recordarlo.
-        if (h.type == TrackingType.COUNT && h.goalType == GoalType.POSITIVE && HabitLogic.isMet(h, progress)) return
+        val alreadyDone = when (h.type) {
+            TrackingType.COUNT, TrackingType.HEALTH -> h.goalType == GoalType.POSITIVE && HabitLogic.isMet(h, progress)
+            TrackingType.MOOD, TrackingType.WEIGHT -> com.rutina.app.domain.loggedOn(logs, today)
+            else -> false
+        }
+        if (alreadyDone) return
         val text = when (h.type) {
             TrackingType.QUIT -> "Llevas ${HabitLogic.formatShort(System.currentTimeMillis() - (h.quitSince ?: h.createdAt))} sin recaer. ¡Sigue así!"
             TrackingType.JOURNAL -> "Escribe unas palabras en tu diario."
+            TrackingType.MOOD -> "¿Cómo te sientes hoy? Registra tu estado de ánimo."
+            TrackingType.WEIGHT -> "Es buen momento para registrar tu peso."
             else -> {
                 val streak = HabitStats.summary(h, logs, DayOfWeek.SUNDAY, today).current
                 "Hoy: ${HabitLogic.progressLabel(h, progress)}" + if (streak > 0) " · racha de $streak 🔥" else ""

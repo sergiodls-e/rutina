@@ -39,6 +39,22 @@ object HabitStats {
 
     private val es = Locale("es", "MX")
 
+    /**
+     * Valor de cada día según el tipo: suma (recuento, diario, salud),
+     * promedio (estado de ánimo) o el último registro (peso).
+     */
+    fun dayValues(h: Habit, logs: List<HabitLog>): Map<LocalDate, Double> = when (h.type) {
+        TrackingType.MOOD -> logs.groupBy { HabitLogic.dateOf(it.timestamp) }.mapValues { (_, l) -> l.map { it.value }.average() }
+        TrackingType.WEIGHT -> logs.groupBy { HabitLogic.dateOf(it.timestamp) }.mapValues { (_, l) -> l.maxBy { it.timestamp }.value }
+        else -> dayTotals(logs)
+    }
+
+    /** Ánimo y peso se miden por días con registro, no contra una meta diaria. */
+    private fun effective(h: Habit): Habit =
+        if (h.type == TrackingType.MOOD || h.type == TrackingType.WEIGHT) {
+            h.copy(goalType = GoalType.NONE, period = GoalPeriod.DAY, scheduleType = ScheduleType.ALL_DAYS)
+        } else h
+
     fun dayTotals(logs: List<HabitLog>): Map<LocalDate, Double> {
         val m = HashMap<LocalDate, Double>()
         for (l in logs) {
@@ -68,6 +84,15 @@ object HabitStats {
         if (day > today) return Cell(CellKind.FUTURE)
         if (day < created(h)) return Cell(CellKind.SKIP)
         if (h.type == TrackingType.QUIT) return Cell(if (day in resets) CellKind.FAILED else CellKind.DONE)
+        if (h.type == TrackingType.WEIGHT) return Cell(if ((totals[day] ?: 0.0) > 0) CellKind.DONE else CellKind.EMPTY)
+        if (h.type == TrackingType.MOOD) {
+            val m = totals[day] ?: 0.0
+            return when {
+                m <= 0 -> Cell(CellKind.EMPTY)
+                m >= 4.5 -> Cell(CellKind.DONE)
+                else -> Cell(CellKind.PARTIAL, (m / 5.0).toFloat().coerceIn(0.15f, 0.95f))
+            }
+        }
         val v = totals[day] ?: 0.0
         val daily = h.period == GoalPeriod.DAY
         if (daily && !HabitLogic.isScheduled(h, day)) return Cell(if (v > 0) CellKind.DONE else CellKind.SKIP)
@@ -135,8 +160,9 @@ object HabitStats {
         return out
     }
 
-    fun summary(h: Habit, logs: List<HabitLog>, weekStart: DayOfWeek, today: LocalDate = LocalDate.now()): HabitSummary {
-        val totals = dayTotals(logs)
+    fun summary(original: Habit, logs: List<HabitLog>, weekStart: DayOfWeek, today: LocalDate = LocalDate.now()): HabitSummary {
+        val totals = dayValues(original, logs)
+        val h = effective(original)
         val results = periodResults(h, totals, weekStart, today)
         var current = 0
         for (r in results.asReversed()) { if (r.second) current++ else break }

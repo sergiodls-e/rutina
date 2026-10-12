@@ -104,7 +104,9 @@ private fun HabitsContent(rows: List<WHabit>) {
                 "Hábitos de hoy", modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = White, fontSize = 15.sp, fontWeight = FontWeight.Bold),
             )
-            Text("${rows.count { it.met }}/${rows.size}", style = TextStyle(color = Dim, fontSize = 13.sp))
+            // Los hábitos de Dejar y Peso no tienen meta diaria: no cuentan en "hechos de hoy".
+            val goals = rows.filter { it.type != TrackingType.QUIT && it.type != TrackingType.WEIGHT }
+            Text("${goals.count { it.met }}/${goals.size}", style = TextStyle(color = Dim, fontSize = 13.sp))
         }
         if (rows.isEmpty()) {
             Text("No hay hábitos para hoy", modifier = GlanceModifier.padding(4.dp), style = TextStyle(color = Dim, fontSize = 13.sp))
@@ -141,7 +143,15 @@ private fun HabitRow(r: WHabit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    when { r.type == TrackingType.QUIT -> "›"; r.type == TrackingType.JOURNAL -> "✎"; r.met -> "✓"; else -> "+" },
+                    when {
+                        r.type == TrackingType.QUIT -> "›"
+                        r.type == TrackingType.JOURNAL -> "✎"
+                        r.type == TrackingType.MOOD -> "☺"
+                        r.type == TrackingType.WEIGHT -> "›"
+                        r.met -> "✓"
+                        r.type == TrackingType.HEALTH -> "↻"
+                        else -> "+"
+                    },
                     style = TextStyle(color = if (r.met) Black else White, fontSize = 18.sp, fontWeight = FontWeight.Bold),
                 )
             }

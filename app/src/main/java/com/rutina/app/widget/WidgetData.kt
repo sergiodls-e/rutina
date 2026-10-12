@@ -6,6 +6,8 @@ import com.rutina.app.data.TrackingType
 import com.rutina.app.domain.HabitLogic
 import com.rutina.app.domain.HabitStats
 import com.rutina.app.domain.TaskLogic
+import com.rutina.app.domain.doneOn
+import com.rutina.app.domain.todayLabel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.DayOfWeek
@@ -50,10 +52,8 @@ object WidgetData {
                 name = h.name,
                 color = h.color,
                 type = h.type,
-                text = if (h.type == TrackingType.QUIT) {
-                    "${HabitLogic.formatShort(System.currentTimeMillis() - (h.quitSince ?: h.createdAt))} sin recaer"
-                } else HabitLogic.progressLabel(h, p),
-                met = h.type != TrackingType.QUIT && h.goalType != GoalType.NEGATIVE && HabitLogic.isMet(h, p),
+                text = todayLabel(h, l, today, weekStart),
+                met = doneOn(h, l, today, weekStart),
             )
         }
     }

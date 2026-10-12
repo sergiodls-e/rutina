@@ -296,3 +296,81 @@ fun BarChart(
         }
     }
 }
+
+/**
+ * Gráfica de línea de una sola serie (p. ej. peso), con meta opcional.
+ * Toca para ver el valor del punto más cercano.
+ */
+@Composable
+fun LineChart(
+    points: List<ChartPoint>,
+    color: Color,
+    valueLabel: (Double) -> String,
+    modifier: Modifier = Modifier,
+    target: Double? = null,
+) {
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
+    if (points.size < 2) {
+        Text("Registra al menos dos veces para ver la tendencia.", color = dim, fontSize = 13.sp)
+        return
+    }
+    var selected by remember(points) { mutableStateOf(points.lastIndex) }
+    val values = points.map { it.value } + listOfNotNull(target)
+    val lo0 = values.min()
+    val hi0 = values.max()
+    val pad = ((hi0 - lo0) * 0.15).coerceAtLeast(0.5)
+    val lo = lo0 - pad
+    val hi = hi0 + pad
+    val grid = MaterialTheme.colorScheme.outline
+    Column(modifier) {
+        val p = points[selected.coerceIn(0, points.lastIndex)]
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(valueLabel(p.value), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(p.label, color = dim, fontSize = 13.sp)
+            if (target != null) {
+                Spacer(Modifier.weight(1f))
+                Text("Meta: ${valueLabel(target)}", color = dim, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Canvas(
+            Modifier.fillMaxWidth().height(150.dp).pointerInput(points) {
+                detectTapGestures { o ->
+                    val step = size.width.toFloat() / (points.size - 1)
+                    selected = ((o.x / step) + 0.5f).toInt().coerceIn(0, points.lastIndex)
+                }
+            }
+        ) {
+            val step = size.width / (points.size - 1)
+            fun y(v: Double) = (size.height - ((v - lo) / (hi - lo)) * size.height).toFloat()
+            drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
+            if (target != null) {
+                drawLine(
+                    dim, Offset(0f, y(target)), Offset(size.width, y(target)), strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+                )
+            }
+            val path = androidx.compose.ui.graphics.Path()
+            points.forEachIndexed { i, pt ->
+                val x = i * step
+                if (i == 0) path.moveTo(x, y(pt.value)) else path.lineTo(x, y(pt.value))
+            }
+            drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+            points.forEachIndexed { i, pt ->
+                val c = Offset(i * step, y(pt.value))
+                if (i == selected) {
+                    drawCircle(Color(0xFF222222), radius = 7.dp.toPx(), center = c)
+                    drawCircle(color, radius = 5.dp.toPx(), center = c)
+                } else if (points.size <= 31) {
+                    drawCircle(color, radius = 3.dp.toPx(), center = c)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            Text(points.first().label, fontSize = 10.sp, color = dim)
+            Spacer(Modifier.weight(1f))
+            Text(points.last().label, fontSize = 10.sp, color = dim)
+        }
+    }
+}

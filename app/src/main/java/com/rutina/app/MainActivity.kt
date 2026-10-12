@@ -3,6 +3,8 @@ package com.rutina.app
 import android.net.Uri
 import android.content.Intent
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -198,6 +200,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Trae los datos más recientes de Health Connect al volver a la app.
+        val app = application as RutinaApp
+        lifecycleScope.launch { runCatching { app.health.syncAll() } }
     }
 
     override fun onNewIntent(intent: Intent) {

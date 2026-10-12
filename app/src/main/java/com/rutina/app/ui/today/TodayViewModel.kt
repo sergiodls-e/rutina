@@ -14,6 +14,8 @@ import com.rutina.app.data.TaskList
 import com.rutina.app.data.TrackingType
 import com.rutina.app.domain.HabitLogic
 import com.rutina.app.domain.HabitStats
+import com.rutina.app.domain.doneOn
+import com.rutina.app.domain.todayLabel
 import com.rutina.app.data.HabitDisplay
 import com.rutina.app.data.Prefs
 import com.rutina.app.domain.NoteLogic
@@ -35,6 +37,8 @@ data class HabitRow(
     val fraction: Float,
     val met: Boolean,
     val streak: Int,
+    /** Texto de estado: "3 / 8 vasos", "🙂 Bien", "72.4 kg (-0.6)". */
+    val label: String = "",
     /** Total registrado por día (para las vistas semanal/mensual/anual). */
     val totals: Map<LocalDate, Double> = emptyMap(),
     /** Días con recaída (hábitos de Dejar). */
@@ -110,15 +114,23 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
         fun row(h: Habit): HabitRow {
             val hl = if (h.type == TrackingType.JOURNAL) journalLogs[h.id].orEmpty() else byHabit[h.id].orEmpty()
             val p = HabitLogic.progress(h, hl, b.date, weekStart)
+            val todayMood = if (h.type == TrackingType.MOOD) {
+                hl.filter { HabitLogic.dateOf(it.timestamp) == b.date }.map { it.value }.average().takeIf { !it.isNaN() }
+            } else null
             return HabitRow(
                 habit = h,
                 progress = p,
-                fraction = HabitLogic.fraction(h, p),
-                met = h.type != TrackingType.QUIT && h.goalType != GoalType.NEGATIVE && HabitLogic.isMet(h, p),
+                fraction = when (h.type) {
+                    TrackingType.MOOD -> ((todayMood ?: 0.0) / 5.0).toFloat()
+                    TrackingType.WEIGHT -> 0f
+                    else -> HabitLogic.fraction(h, p)
+                },
+                met = doneOn(h, hl, b.date, weekStart),
+                label = todayLabel(h, hl, b.date, weekStart),
                 streak = if (h.type == TrackingType.QUIT) {
                     h.quitSince?.let { ChronoUnit.DAYS.between(HabitLogic.dateOf(it), today).toInt() } ?: 0
                 } else HabitStats.summary(h, hl, weekStart, today).current,
-                totals = HabitStats.dayTotals(hl),
+                totals = HabitStats.dayValues(h, hl),
                 resets = if (h.type == TrackingType.QUIT) HabitStats.resetDays(hl) else emptySet(),
             )
         }

@@ -54,6 +54,9 @@ interface HabitDao {
     @Query("DELETE FROM habit_logs WHERE habitId = :habitId")
     suspend fun deleteLogsFor(habitId: Long)
 
+    @Query("DELETE FROM habit_logs WHERE habitId = :habitId AND timestamp >= :from AND timestamp < :to")
+    suspend fun deleteLogsBetween(habitId: Long, from: Long, to: Long)
+
     @Query("SELECT MAX(timestamp) FROM habit_logs WHERE habitId = :habitId")
     suspend fun lastLogTime(habitId: Long): Long?
 

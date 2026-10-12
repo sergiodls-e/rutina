@@ -60,11 +60,12 @@ class StatsViewModel(db: AppDatabase) : ViewModel() {
         val byHabit = logs.groupBy { it.habitId }
         val journal = HabitStats.journalLogs(notes)
         val logsOf = habits.associate { it.id to HabitStats.logsOf(it, byHabit, journal) }
-        val totals = logsOf.mapValues { HabitStats.dayTotals(it.value) }
+        val habitById = habits.associateBy { it.id }
+        val totals = logsOf.mapValues { (id, l) -> HabitStats.dayValues(habitById.getValue(id), l) }
         val resets = habits.filter { it.type == TrackingType.QUIT }.associate { it.id to HabitStats.resetDays(logsOf[it.id].orEmpty()) }
 
         fun daily(h: Habit, d: LocalDate) =
-            h.type != TrackingType.QUIT && h.period == GoalPeriod.DAY && d >= HabitStats.created(h) && HabitLogic.isScheduled(h, d)
+            h.type in setOf(TrackingType.COUNT, TrackingType.JOURNAL, TrackingType.HEALTH) && h.period == GoalPeriod.DAY && d >= HabitStats.created(h) && HabitLogic.isScheduled(h, d)
 
         fun done(h: Habit, d: LocalDate) =
             HabitStats.cell(h, d, totals[h.id].orEmpty(), resets[h.id].orEmpty(), today).kind == CellKind.DONE
@@ -124,7 +125,7 @@ class HabitStatsViewModel(db: AppDatabase, habitId: Long) : ViewModel() {
     ) { h, rawLogs, notes ->
         if (h == null) return@combine HabitDetail(loaded = true)
         val logs = if (h.type == TrackingType.JOURNAL) HabitStats.journalLogs(notes)[h.id].orEmpty() else rawLogs
-        val totals = HabitStats.dayTotals(logs)
+        val totals = HabitStats.dayValues(h, logs)
         val today = LocalDate.now()
         HabitDetail(
             loaded = true,

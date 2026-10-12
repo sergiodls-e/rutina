@@ -86,6 +86,11 @@ import com.rutina.app.domain.HabitLogic
 import com.rutina.app.domain.Palette
 import com.rutina.app.domain.Suggestion
 import com.rutina.app.domain.Suggestions
+import com.rutina.app.domain.HealthMetric
+import com.rutina.app.domain.Weight
+import com.rutina.app.domain.WeightUnits
+import com.rutina.app.ui.common.HealthConnectCard
+import com.rutina.app.ui.common.rememberHealthConnector
 import com.rutina.app.ui.common.Dropdown
 import com.rutina.app.ui.common.FormRow
 import com.rutina.app.ui.common.Pill
@@ -227,9 +232,9 @@ private data class TypeInfo(val type: TrackingType, val title: String, val desc:
 private val typeInfos = listOf(
     TypeInfo(TrackingType.COUNT, "Recuento", "Con qué frecuencia completas una actividad", Icons.Filled.CheckBox, true),
     TypeInfo(TrackingType.QUIT, "Dejar", "Tiempo desde que dejaste un mal hábito", Icons.Filled.Block, true),
-    TypeInfo(TrackingType.MOOD, "Estado de ánimo", "Tus emociones a lo largo del tiempo", Icons.Filled.SentimentSatisfied, false),
-    TypeInfo(TrackingType.WEIGHT, "Peso corporal", "Progreso y tendencia de tu peso", Icons.Filled.MonitorWeight, false),
-    TypeInfo(TrackingType.HEALTH, "Health Connect", "Pasos, distancia, calorías (automático)", Icons.Filled.Favorite, false),
+    TypeInfo(TrackingType.MOOD, "Estado de ánimo", "Tus emociones a lo largo del tiempo", Icons.Filled.SentimentSatisfied, true),
+    TypeInfo(TrackingType.WEIGHT, "Peso corporal", "Progreso y tendencia de tu peso", Icons.Filled.MonitorWeight, true),
+    TypeInfo(TrackingType.HEALTH, "Health Connect", "Pasos, distancia, calorías (automático)", Icons.Filled.Favorite, true),
     TypeInfo(TrackingType.JOURNAL, "Diario", "Cuánto escribes en tu diario", Icons.Filled.MenuBook, true),
 )
 
@@ -306,8 +311,22 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                 }
             }
 
-            if (h.type == TrackingType.COUNT || h.type == TrackingType.JOURNAL) {
-                val step = if (h.type == TrackingType.JOURNAL) 10.0 else 1.0
+            if (h.type == TrackingType.HEALTH) {
+                val metric = HealthMetric.of(h)
+                FormRow("Dato") {
+                    Dropdown(metric.title, HealthMetric.entries.map { it.title to it }) { m ->
+                        vm.update { it.copy(unit = m.unit, target = m.defaultTarget) }
+                    }
+                }
+                HealthConnectCard(rememberHealthConnector())
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            }
+            if (h.type == TrackingType.COUNT || h.type == TrackingType.JOURNAL || h.type == TrackingType.HEALTH) {
+                val step = when (h.type) {
+                    TrackingType.JOURNAL -> 10.0
+                    TrackingType.HEALTH -> HealthMetric.of(h).step
+                    else -> 1.0
+                }
                 FormRow("Tipo de objetivo") {
                     Dropdown(
                         current = when (h.goalType) { GoalType.POSITIVE -> "👍 Positivo"; GoalType.NEGATIVE -> "👎 Negativo"; GoalType.NONE -> "⊖ Sin objetivo" },
@@ -340,7 +359,7 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                                 IconButton(onClick = { vm.update { it.copy(target = it.target + step) } }) { Icon(Icons.Filled.KeyboardArrowUp, "Más") }
                             }
                             Spacer(Modifier.width(12.dp))
-                            if (h.type == TrackingType.JOURNAL) Text("palabras", fontSize = 18.sp)
+                            if (h.type == TrackingType.JOURNAL || h.type == TrackingType.HEALTH) Text(h.unit, fontSize = 18.sp)
                             else Dropdown(h.unit, Suggestions.units.map { it to it }) { u -> vm.update { it.copy(unit = u) } }
                         }
                         Spacer(Modifier.height(8.dp))
@@ -382,6 +401,35 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                             Text("${h.daysPerWeek} días por semana")
                             IconButton(onClick = { vm.update { it.copy(daysPerWeek = (it.daysPerWeek + 1).coerceAtMost(7)) } }) { Icon(Icons.Filled.KeyboardArrowUp, "Más") }
                         }
+                    }
+                }
+            } else if (h.type == TrackingType.MOOD) {
+                Text(
+                    "Registra cómo te sientes (de 😣 a 😄) y tus emociones. Verás tu promedio, " +
+                        "tus días más frecuentes y la tendencia en las estadísticas.",
+                    modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (h.type == TrackingType.WEIGHT) {
+                FormRow("Unidad") {
+                    Dropdown(h.unit.ifBlank { "kg" }, WeightUnits.map { it to it }) { u -> vm.update { it.copy(unit = u) } }
+                }
+                FormRow("Meta") {
+                    Dropdown(
+                        when (h.goalType) { GoalType.NEGATIVE -> "Bajar hasta"; GoalType.POSITIVE -> "Subir hasta"; GoalType.NONE -> "Solo registrar" },
+                        listOf("Solo registrar" to GoalType.NONE, "Bajar hasta" to GoalType.NEGATIVE, "Subir hasta" to GoalType.POSITIVE),
+                    ) { g -> vm.update { it.copy(goalType = g) } }
+                }
+                if (h.goalType != GoalType.NONE) {
+                    FormRow("Peso meta") {
+                        var txt by remember(h.id) { mutableStateOf(if (h.target > 0) Weight.format(h.target) else "") }
+                        OutlinedTextField(
+                            txt,
+                            { v -> txt = v; v.replace(',', '.').toDoubleOrNull()?.let { d -> vm.update { it.copy(target = d) } } },
+                            suffix = { Text(h.unit) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.width(140.dp),
+                        )
                     }
                 }
             } else if (h.type == TrackingType.QUIT) {
@@ -435,15 +483,28 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                                 .border(2.dp, if (sel) color else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
                                 .clickable(enabled = t.ready) {
                                     vm.update {
-                                        val wasJournal = it.type == TrackingType.JOURNAL
+                                        val wasJournal = it.type != TrackingType.COUNT
                                         when (t.type) {
+                                            TrackingType.MOOD -> it.copy(
+                                                type = t.type, goalType = GoalType.NONE, unit = "", target = 1.0,
+                                                period = GoalPeriod.DAY, scheduleType = ScheduleType.ALL_DAYS,
+                                            )
+                                            TrackingType.WEIGHT -> it.copy(
+                                                type = t.type, goalType = GoalType.NONE, unit = "kg", target = 0.0,
+                                                period = GoalPeriod.DAY, scheduleType = ScheduleType.ALL_DAYS,
+                                            )
+                                            TrackingType.HEALTH -> it.copy(
+                                                type = t.type, goalType = GoalType.POSITIVE,
+                                                unit = HealthMetric.STEPS.unit, target = HealthMetric.STEPS.defaultTarget,
+                                                period = GoalPeriod.DAY,
+                                            )
                                             TrackingType.QUIT -> it.copy(
                                                 type = t.type, goalType = GoalType.NONE,
                                                 period = GoalPeriod.DAY, scheduleType = ScheduleType.ALL_DAYS,
                                             )
                                             TrackingType.JOURNAL -> it.copy(
                                                 type = t.type, goalType = GoalType.POSITIVE, unit = "palabras",
-                                                target = if (wasJournal) it.target else 100.0,
+                                                target = if (it.type == TrackingType.JOURNAL) it.target else 100.0,
                                             )
                                             else -> it.copy(
                                                 type = t.type, goalType = GoalType.POSITIVE,
