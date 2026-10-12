@@ -24,8 +24,8 @@ import java.util.Locale
 
 private val es = Locale("es", "MX")
 
-// TODO Fase 9: leer de Ajustes.
-val StatsWeekStart: DayOfWeek = DayOfWeek.SUNDAY
+/** Inicio de semana elegido en Ajustes. */
+val StatsWeekStart: DayOfWeek get() = com.rutina.app.RutinaApp.instance.prefs.weekStart.value
 
 // ---------------------------------------------------------------- Resumen general
 

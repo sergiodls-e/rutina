@@ -34,7 +34,7 @@ data class WTask(
 
 object WidgetData {
 
-    private val weekStart = DayOfWeek.SUNDAY
+    private val weekStart: DayOfWeek get() = com.rutina.app.RutinaApp.instance.prefs.weekStart.value
     private val defaultTaskColor = 0xFF9FA8DA.toInt()
 
     /** Hábitos que tocan hoy, con su progreso. */

@@ -67,6 +67,7 @@ data class TodayState(
     val todayCount: Int = 0,
     val pendingCount: Int = 0,
     val habitCount: Int = 0,
+    val weekStart: DayOfWeek = DayOfWeek.SUNDAY,
     val loaded: Boolean = false,
 ) {
     val showsWeek get() = view == MainView.Today || view == MainView.AllHabits
@@ -89,8 +90,8 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
     fun setDisplay(d: HabitDisplay) = prefs.setHabitDisplay(d)
 
 
-    // TODO Fase 9: leer de Ajustes.
-    val weekStart: DayOfWeek = DayOfWeek.SUNDAY
+    /** Inicio de semana elegido en Ajustes. */
+    val weekStart: DayOfWeek get() = prefs.weekStart.value
 
     private val selected = MutableStateFlow(LocalDate.now())
     private val view = MutableStateFlow<MainView>(MainView.Today)
@@ -100,11 +101,11 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
     ) { d, v, h, l, t -> Base(d, v, h, l, t) }
 
     val state: StateFlow<TodayState> = combine(
-        base, db.tasks().observeLists(), db.tasks().observeFilters(), db.notes().observeAll(),
-    ) { b, lists, filters, notes -> build(b, lists, filters, notes) }
+        base, db.tasks().observeLists(), db.tasks().observeFilters(), db.notes().observeAll(), prefs.weekStart,
+    ) { b, lists, filters, notes, w -> build(b, lists, filters, notes, w) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TodayState())
 
-    private fun build(b: Base, lists: List<TaskList>, filters: List<TaskFilter>, notes: List<Note>): TodayState {
+    private fun build(b: Base, lists: List<TaskList>, filters: List<TaskFilter>, notes: List<Note>, weekStart: DayOfWeek): TodayState {
         val today = LocalDate.now()
         val byHabit = b.logs.groupBy { it.habitId }
         // Hábitos de tipo Diario: cada nota etiquetada cuenta sus palabras como un registro.
@@ -192,6 +193,7 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
             todayCount = todayTasks.count { !it.done },
             pendingCount = b.tasks.count { !it.done },
             habitCount = b.habits.size,
+            weekStart = weekStart,
             loaded = true,
         )
     }

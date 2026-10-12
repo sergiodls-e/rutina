@@ -68,6 +68,13 @@ import com.rutina.app.ui.tasks.ManageListsViewModel
 import com.rutina.app.ui.tasks.TaskEditorScreen
 import com.rutina.app.ui.tasks.TaskEditorViewModel
 import com.rutina.app.ui.today.TodayViewModel
+import com.rutina.app.ui.settings.AchievementsScreen
+import com.rutina.app.ui.settings.AchievementsViewModel
+import com.rutina.app.ui.settings.ArchiveScreen
+import com.rutina.app.ui.settings.ArchiveViewModel
+import com.rutina.app.ui.settings.SettingsScreen
+import com.rutina.app.ui.settings.SettingsViewModel
+import com.rutina.app.ui.tutorial.TutorialScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -81,7 +88,14 @@ class MainActivity : ComponentActivity() {
         val db = app.db
         openTimer.value = intent?.getBooleanExtra(EXTRA_OPEN_TIMER, false) == true
         setContent {
-            RutinaTheme {
+            val textSize by app.prefs.textSize.collectAsState()
+            val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                    baseDensity.density, baseDensity.fontScale * textSize.scale,
+                ),
+            ) {
+            RutinaTheme(dark = true) {
                 val nav = rememberNavController()
                 LaunchedEffect(openTimer.value) {
                     if (openTimer.value) {
@@ -98,10 +112,16 @@ class MainActivity : ComponentActivity() {
                         val todayVm: TodayViewModel = viewModel { TodayViewModel(db, app.prefs) }
                         val journalVm: JournalViewModel = viewModel { JournalViewModel(db) }
                         val calendarVm: CalendarViewModel = viewModel { CalendarViewModel(db, app.prefs) }
+                        val settingsVm: SettingsViewModel = viewModel { SettingsViewModel(db, app.prefs) }
                         MainTabs(
                             todayVm = todayVm,
                             journalVm = journalVm,
                             calendarVm = calendarVm,
+                            settingsVm = settingsVm,
+                            startTab = app.prefs.startTab.value.ordinal,
+                            onTutorial = { nav.navigate("tutorial") },
+                            onArchive = { nav.navigate("archive") },
+                            onAchievements = { nav.navigate("achievements") },
                             onCreateTaskAt = { day, min ->
                                 nav.navigate("task/form?day=${day.toEpochDay()}&min=${min ?: -1}")
                             },
@@ -197,7 +217,19 @@ class MainActivity : ComponentActivity() {
                         val vm: HabitEditorViewModel = viewModel { HabitEditorViewModel(db, id, preset) }
                         HabitFormScreen(vm, onClose = { nav.popBackStack() })
                     }
+                    composable("tutorial") {
+                        TutorialScreen(onClose = { nav.popBackStack() })
+                    }
+                    composable("archive") {
+                        val vm: ArchiveViewModel = viewModel { ArchiveViewModel(db) }
+                        ArchiveScreen(vm, onClose = { nav.popBackStack() })
+                    }
+                    composable("achievements") {
+                        val vm: AchievementsViewModel = viewModel { AchievementsViewModel(db, app.prefs) }
+                        AchievementsScreen(vm, onClose = { nav.popBackStack() })
+                    }
                 }
+            }
             }
         }
     }
@@ -231,6 +263,11 @@ private fun MainTabs(
     todayVm: TodayViewModel,
     journalVm: JournalViewModel,
     calendarVm: CalendarViewModel,
+    settingsVm: SettingsViewModel,
+    startTab: Int,
+    onTutorial: () -> Unit,
+    onArchive: () -> Unit,
+    onAchievements: () -> Unit,
     onCreateTaskAt: (java.time.LocalDate, Int?) -> Unit,
     onNewNote: (habitId: Long?) -> Unit,
     onEditNote: (Long) -> Unit,
@@ -244,7 +281,7 @@ private fun MainTabs(
     onOpenStats: () -> Unit,
     onHabitStats: (Long) -> Unit,
 ) {
-    var tab by rememberSaveable { mutableTabState() }
+    var tab by rememberSaveable { mutableTabState(startTab) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0),
@@ -284,17 +321,22 @@ private fun MainTabs(
                     onCreateAt = onCreateTaskAt,
                     onHabitStats = onHabitStats,
                 )
-                Tab.SETTINGS -> ComingSoon(
-                    "Ajustes",
-                    "Llega en la Fase 9: tema, inicio de semana, exportar/importar respaldo y borrar datos.\n\n" +
-                        "Tus datos viven solo en este teléfono: la app no tiene permiso de Internet.",
+                Tab.SETTINGS -> SettingsScreen(
+                    settingsVm,
+                    onSearch = {
+                        todayVm.show(com.rutina.app.ui.today.MainView.Search(""))
+                        tab = Tab.TODAY.ordinal
+                    },
+                    onTutorial = onTutorial,
+                    onAchievements = onAchievements,
+                    onArchive = onArchive,
                 )
             }
         }
     }
 }
 
-private fun mutableTabState() = androidx.compose.runtime.mutableIntStateOf(0)
+private fun mutableTabState(start: Int) = androidx.compose.runtime.mutableIntStateOf(start)
 
 @Composable
 private fun ComingSoon(title: String, body: String) {

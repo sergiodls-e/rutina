@@ -70,27 +70,24 @@ private val SESSION_COLOR = 0xFF90A4AE.toInt()
 
 class CalendarViewModel(private val db: AppDatabase, private val prefs: Prefs) : ViewModel() {
 
-    // TODO Fase 9: leer de Ajustes.
-    private val weekStart: DayOfWeek = DayOfWeek.SUNDAY
-
     private val anchor = MutableStateFlow(LocalDate.now())
 
     private val source = combine(
         db.tasks().observeAll(), db.tasks().observeLists(), db.timers().observeAll(), db.habits().observeAll(),
     ) { t, l, s, h -> Source(t, l, s, h) }
 
-    val state: StateFlow<CalState> = combine(anchor, prefs.calendarView, source) { a, v, s -> build(a, v, s) }
+    val state: StateFlow<CalState> = combine(anchor, prefs.calendarView, source, prefs.weekStart) { a, v, s, w -> build(a, v, s, w) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CalState())
 
-    private fun visibleDays(a: LocalDate, v: CalView): List<LocalDate> = when (v) {
+    private fun visibleDays(a: LocalDate, v: CalView, weekStart: DayOfWeek): List<LocalDate> = when (v) {
         CalView.DAY -> listOf(a)
         CalView.THREE -> (0..2).map { a.plusDays(it.toLong()) }
         CalView.WEEK -> HabitLogic.weekStartOf(a, weekStart).let { s -> (0..6).map { s.plusDays(it.toLong()) } }
         CalView.MONTH -> HabitLogic.weekStartOf(a.withDayOfMonth(1), weekStart).let { s -> (0 until 42).map { s.plusDays(it.toLong()) } }
     }
 
-    private fun build(a: LocalDate, v: CalView, s: Source): CalState {
-        val days = visibleDays(a, v)
+    private fun build(a: LocalDate, v: CalView, s: Source, weekStart: DayOfWeek): CalState {
+        val days = visibleDays(a, v, weekStart)
         val from = days.first()
         val to = days.last()
         val listColor = s.lists.associate { it.id to it.color }

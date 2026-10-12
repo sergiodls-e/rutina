@@ -21,6 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun notes(): NoteDao
     abstract fun timers(): TimerDao
     abstract fun reminders(): ReminderDao
+    abstract fun backup(): BackupDao
 
     companion object {
         /** v1 → v2: agrega la tabla de filtros de tareas. Conserva todos tus datos. */

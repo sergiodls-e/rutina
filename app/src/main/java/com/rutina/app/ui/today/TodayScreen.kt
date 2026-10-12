@@ -229,7 +229,7 @@ fun TodayScreen(
             },
         ) { pad ->
             Column(Modifier.padding(pad).fillMaxSize()) {
-                if (state.showsWeek) WeekStrip(state.date, vm) { vm.select(it) }
+                if (state.showsWeek) WeekStrip(state.date, state.weekStart) { vm.select(it) }
                 (state.view as? MainView.Search)?.let { s ->
                     OutlinedTextField(
                         s.query, { vm.show(MainView.Search(it)) },
@@ -263,7 +263,7 @@ fun TodayScreen(
                     ) {
                         if (state.habits.isNotEmpty()) {
                             item { SectionHeader(if (state.view == MainView.Today) "Hábitos diarios" else "Hábitos", state.habits.size) }
-                            if (display == HabitDisplay.WEEK) item(key = "weekhead") { WeekHeader(state.date, vm.weekStart) }
+                            if (display == HabitDisplay.WEEK) item(key = "weekhead") { WeekHeader(state.date, state.weekStart) }
                             items(state.habits, key = { "h" + it.habit.id }) { row ->
                                 when (display) {
                                     HabitDisplay.COMPACT -> HabitCard(
@@ -283,17 +283,17 @@ fun TodayScreen(
                                         onName = { onHabitStats(row.habit.id) },
                                     )
                                     HabitDisplay.WEEK -> HabitWeekRow(
-                                        row, state.date, vm.weekStart,
+                                        row, state.date, state.weekStart,
                                         onName = { onHabitStats(row.habit.id) },
                                         onTap = { tapDay(row, it) }, onLongTap = { longDay(row, it) },
                                     )
                                     HabitDisplay.MONTH -> HabitMonthCard(
-                                        row, state.date, vm.weekStart,
+                                        row, state.date, state.weekStart,
                                         onName = { onHabitStats(row.habit.id) },
                                         onTap = { tapDay(row, it) }, onLongTap = { longDay(row, it) },
                                     )
                                     HabitDisplay.YEAR -> HabitYearCard(
-                                        row, vm.weekStart, onName = { onHabitStats(row.habit.id) },
+                                        row, state.weekStart, onName = { onHabitStats(row.habit.id) },
                                     )
                                 }
                             }
@@ -440,8 +440,8 @@ private fun DrawerItem(
 }
 
 @Composable
-private fun WeekStrip(selected: LocalDate, vm: TodayViewModel, onSelect: (LocalDate) -> Unit) {
-    val start = HabitLogic.weekStartOf(selected, vm.weekStart)
+private fun WeekStrip(selected: LocalDate, weekStart: java.time.DayOfWeek, onSelect: (LocalDate) -> Unit) {
+    val start = HabitLogic.weekStartOf(selected, weekStart)
     val today = LocalDate.now()
     Row(
         Modifier.fillMaxWidth().background(Color.Black).padding(horizontal = 8.dp, vertical = 8.dp),

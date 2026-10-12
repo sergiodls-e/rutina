@@ -158,3 +158,36 @@ interface ReminderDao {
     @Insert
     suspend fun insertAll(list: List<HabitReminder>)
 }
+
+/** Lectura y escritura en bloque para respaldos y para borrar datos. */
+@Dao
+interface BackupDao {
+    @Query("SELECT * FROM habits") suspend fun habits(): List<Habit>
+    @Query("SELECT * FROM habit_logs") suspend fun habitLogs(): List<HabitLog>
+    @Query("SELECT * FROM habit_reminders") suspend fun reminders(): List<HabitReminder>
+    @Query("SELECT * FROM task_lists") suspend fun lists(): List<TaskList>
+    @Query("SELECT * FROM tasks") suspend fun tasks(): List<Task>
+    @Query("SELECT * FROM task_filters") suspend fun filters(): List<TaskFilter>
+    @Query("SELECT * FROM notes") suspend fun notes(): List<Note>
+    @Query("SELECT * FROM timer_sessions") suspend fun sessions(): List<TimerSession>
+
+    @Insert suspend fun insertHabits(l: List<Habit>)
+    @Insert suspend fun insertHabitLogs(l: List<HabitLog>)
+    @Insert suspend fun insertReminders(l: List<HabitReminder>)
+    @Insert suspend fun insertLists(l: List<TaskList>)
+    @Insert suspend fun insertTasks(l: List<Task>)
+    @Insert suspend fun insertFilters(l: List<TaskFilter>)
+    @Insert suspend fun insertNotes(l: List<Note>)
+    @Insert suspend fun insertSessions(l: List<TimerSession>)
+
+    @Query("DELETE FROM habit_reminders") suspend fun clearReminders()
+    @Query("DELETE FROM habit_logs") suspend fun clearHabitLogs()
+    @Query("DELETE FROM habits") suspend fun clearHabits()
+    @Query("DELETE FROM tasks") suspend fun clearTasks()
+    @Query("DELETE FROM task_filters") suspend fun clearFilters()
+    @Query("DELETE FROM task_lists") suspend fun clearLists()
+    @Query("DELETE FROM notes") suspend fun clearNotes()
+    @Query("DELETE FROM timer_sessions") suspend fun clearSessions()
+    /** Las notas de hábitos borrados quedan como notas sueltas. */
+    @Query("UPDATE notes SET habitId = NULL") suspend fun untagNotes()
+}
