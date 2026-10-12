@@ -73,7 +73,12 @@ class SettingsViewModel(private val db: AppDatabase, val prefs: Prefs) : ViewMod
             runCatching {
                 val text = resolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
                     ?: error("sin acceso")
-                if (Backup.isEncrypted(text)) RestoreStep.NeedsPassword(text) else RestoreStep.Ready(Backup.parse(text))
+                if (Backup.isEncrypted(text)) {
+                    // Primero intenta con tu contraseña de respaldo guardada.
+                    val saved = prefs.backupPassword()
+                    val plain = saved?.let { pw -> runCatching { Backup.decrypt(text, pw) }.getOrNull() }
+                    if (plain != null) RestoreStep.Ready(Backup.parse(plain)) else RestoreStep.NeedsPassword(text)
+                } else RestoreStep.Ready(Backup.parse(text))
             }.getOrElse { e ->
                 RestoreStep.Error((e as? InvalidBackupException)?.message ?: "No se pudo leer el archivo.")
             }
@@ -102,6 +107,32 @@ class SettingsViewModel(private val db: AppDatabase, val prefs: Prefs) : ViewMod
     }
 
     fun dismissRestore() { _restore.value = RestoreStep.Idle }
+
+    // ------------------------------------------------------------ respaldo automático
+
+    /** Guarda la carpeta elegida y conserva el permiso de escritura aunque reinicies el teléfono. */
+    fun setFolder(ctx: android.content.Context, uri: Uri) {
+        val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        runCatching { ctx.contentResolver.takePersistableUriPermission(uri, flags) }
+        prefs.autoBackupFolder.value?.let { old ->
+            if (old != uri.toString()) runCatching { ctx.contentResolver.releasePersistableUriPermission(Uri.parse(old), flags) }
+        }
+        prefs.setAutoBackupFolder(uri.toString())
+        com.rutina.app.backup.AutoBackup.schedule(ctx)
+    }
+
+    fun setAutoDays(ctx: android.content.Context, days: Int) {
+        prefs.setAutoBackupDays(days)
+        com.rutina.app.backup.AutoBackup.schedule(ctx)
+    }
+
+    /** Respaldo automático inmediato (para probar la carpeta). */
+    fun backupNow(ctx: android.content.Context, onDone: (com.rutina.app.backup.AutoBackup.Outcome) -> Unit) = viewModelScope.launch {
+        _busy.value = true
+        val r = com.rutina.app.backup.AutoBackup.run(ctx.applicationContext)
+        _busy.value = false
+        onDone(r)
+    }
 
     fun deleteData(kinds: Set<DataKind>, onDone: () -> Unit) = viewModelScope.launch {
         Backup.delete(db, kinds)

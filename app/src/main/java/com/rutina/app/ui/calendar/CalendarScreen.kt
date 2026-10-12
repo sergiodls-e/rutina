@@ -67,6 +67,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -79,6 +85,7 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rutina.app.data.CalView
 import com.rutina.app.data.Task
+import com.rutina.app.data.RepeatRule
 import com.rutina.app.domain.TaskLogic
 import com.rutina.app.ui.common.weekdayLetters
 import com.rutina.app.ui.theme.Accent
@@ -121,9 +128,12 @@ fun CalendarScreen(
     var scheduling by remember { mutableStateOf(false) }
     var scheduleTask by remember { mutableStateOf<Task?>(null) }
 
+    var actionsFor by remember { mutableStateOf<CalEvent?>(null) }
+    var rescheduleTask by remember { mutableStateOf<Task?>(null) }
+
     fun open(e: CalEvent) {
         when (e.kind) {
-            EventKind.TASK, EventKind.GHOST -> e.task?.let { onOpenTask(it.id) }
+            EventKind.TASK, EventKind.GHOST -> actionsFor = e
             EventKind.SESSION -> e.habitId?.let(onHabitStats)
         }
     }
@@ -206,6 +216,52 @@ fun CalendarScreen(
                 )
             }
         }
+    }
+
+    actionsFor?.let { e ->
+        val t = e.task
+        AlertDialog(
+            onDismissRequest = { actionsFor = null },
+            title = { Text(e.title) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val due = t?.let { TaskLogic.dueLabel(if (e.kind == EventKind.GHOST) it.copy(dueEpochDay = e.day.toEpochDay()) else it) }
+                    if (due != null) Text(due, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (t != null && t.repeat != RepeatRule.NEVER) Text("↻ " + TaskLogic.repeatLabel(t), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    if (e.kind == EventKind.GHOST) {
+                        Text(
+                            "Es una repetición futura. Se crea cuando completes u omitas la anterior.",
+                            fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp),
+                        )
+                    } else if (t != null) {
+                        Spacer(Modifier.height(6.dp))
+                        if (!t.done) {
+                            TextButton(onClick = { vm.complete(t); actionsFor = null }) { Text("✓  Completar") }
+                            TextButton(onClick = { vm.skip(t); actionsFor = null }) { Text("⊘  No lo haré") }
+                            TextButton(onClick = { rescheduleTask = t; actionsFor = null }) { Text("📅  Reprogramar") }
+                        } else {
+                            TextButton(onClick = { vm.reopen(t); actionsFor = null }) {
+                                Text(if (t.skipped) "Omitida · volver a pendiente" else "Completada · volver a pendiente")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { actionsFor = null; t?.let { onOpenTask(it.id) } }) {
+                    Text(if (e.kind == EventKind.GHOST) "Editar la serie" else "Editar")
+                }
+            },
+            dismissButton = { TextButton(onClick = { actionsFor = null }) { Text("Cerrar") } },
+        )
+    }
+
+    rescheduleTask?.let { t ->
+        ScheduleDialogs(
+            initialDay = TaskLogic.due(t) ?: LocalDate.now(),
+            onDone = { d, m -> vm.schedule(t, d, m); rescheduleTask = null },
+            onCancel = { rescheduleTask = null },
+        )
     }
 
     if (jump) {
@@ -350,9 +406,26 @@ private fun TimeGrid(
     }
     HorizontalDivider(color = GridLine)
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // Pellizcar con dos dedos acerca o aleja las horas.
+    var zoom by rememberSaveable { mutableFloatStateOf(1f) }
+    val hourH = HourH * zoom
+    BoxWithConstraints(
+        Modifier.fillMaxSize().pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                do {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.changes.count { it.pressed } >= 2) {
+                        val z = event.calculateZoom()
+                        if (z != 1f) zoom = (zoom * z).coerceIn(0.5f, 2.5f)
+                        event.changes.forEach { it.consume() }
+                    }
+                } while (event.changes.any { it.pressed })
+            }
+        },
+    ) {
         val density = LocalDensity.current
-        val hourPx = with(density) { HourH.toPx() }
+        val hourPx = with(density) { hourH.toPx() }
         val gutterPx = with(density) { Gutter.toPx() }
         val colPx = (constraints.maxWidth - gutterPx) / days.size
         val scroll = rememberScrollState()
@@ -364,7 +437,7 @@ private fun TimeGrid(
         val tap by rememberUpdatedState(onTapSlot)
 
         Box(Modifier.fillMaxSize().verticalScroll(scroll)) {
-            Box(Modifier.fillMaxWidth().height(HourH * 24)) {
+            Box(Modifier.fillMaxWidth().height(hourH * 24)) {
                 Canvas(Modifier.matchParentSize()) {
                     for (h in 1 until 24) {
                         drawLine(GridLine, Offset(gutterPx, h * hourPx), Offset(size.width, h * hourPx), 1f)
@@ -377,7 +450,7 @@ private fun TimeGrid(
                 for (h in 1 until 24) {
                     Text(
                         hourLabel(h),
-                        Modifier.offset(y = HourH * h - 7.dp).width(Gutter).padding(end = 4.dp),
+                        Modifier.offset(y = hourH * h - 7.dp).width(Gutter).padding(end = 4.dp),
                         fontSize = 9.sp, color = dim, textAlign = TextAlign.End,
                     )
                 }

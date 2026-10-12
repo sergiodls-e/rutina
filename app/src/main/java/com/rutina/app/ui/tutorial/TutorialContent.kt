@@ -60,15 +60,27 @@ object Tutorial {
                     "Elige con qué pestaña abre la app y las vistas predeterminadas de hábitos y calendario",
                 ),
                 g(
-                    "Crear un respaldo", Mock.BACKUP, at(0.5f, 0.82f),
+                    "Contraseña de respaldo", Mock.SETTINGS, null,
+                    "En \"Ajustes\" → \"Respaldo automático\" toca \"Establecer\"",
+                    "Se guarda cifrada con el chip de seguridad del teléfono y protege todos tus respaldos (AES‑256)",
+                    "Apúntala: en un teléfono nuevo la necesitarás. Puedes verla con \"Ver contraseña\"",
+                ),
+                g(
+                    "Respaldo automático", Mock.SETTINGS, null,
+                    "Elige la frecuencia: cada día, semana, 15 o 30 días",
+                    "Elige una carpeta del teléfono; ahí se guardan los últimos 5",
+                    "Al terminar te llega un aviso: toca \"Subir a Drive\" para guardarlo en la nube",
+                ),
+                g(
+                    "Crear un respaldo a mano", Mock.BACKUP, at(0.5f, 0.82f),
                     "En \"Ajustes\" toca \"Crear respaldo\"",
-                    "Si quieres, protégelo con contraseña (cifrado AES‑256)",
+                    "Se cifra con tu contraseña de respaldo (o con otra si lo prefieres)",
                     "Elige Google Drive o una carpeta del teléfono para guardar el archivo",
                 ),
                 g(
                     "Cambiar de teléfono", Mock.SETTINGS, null,
                     "Instala Rutina en el teléfono nuevo",
-                    "En \"Ajustes\" toca \"Restaurar respaldo\" y elige tu archivo (de Drive o de una carpeta)",
+                    "En \"Ajustes\" toca \"Restaurar respaldo\", elige tu archivo y escribe tu contraseña",
                     "Confirma: lo que haya en ese teléfono se reemplaza por tu respaldo",
                 ),
                 g(
@@ -214,6 +226,12 @@ object Tutorial {
                     "Elige fecha, prioridad y lista, y guárdala",
                 ),
                 g(
+                    "Entrada inteligente", Mock.TASK_SHEET, at(0.5f, 0.55f),
+                    "Escribe la fecha, hora o repetición en el título: \"Gym mañana 7am\", \"Renta cada mes\"",
+                    "Debajo verás lo que se detectó; al guardar se quita del título",
+                    "Funciona con hoy, mañana, días de la semana, \"15 sep\", \"a las 5 de la tarde\", \"!alta\"… Se apaga en \"Ajustes\"",
+                ),
+                g(
                     "Fecha, hora y duración", Mock.TASK_FORM, at(0.5f, 0.3f),
                     "Toca \"Más opciones\" en la tarea rápida o abre una tarea existente",
                     "Elige fecha, hora y cuánto dura",
@@ -224,6 +242,18 @@ object Tutorial {
                     "En el editor elige \"Repetir\": cada día, entre semana, cada semana, mes o año",
                     "Al completarla se crea sola la siguiente",
                     "Si la desmarcas por error, la repetición creada se quita",
+                ),
+                g(
+                    "Repetición personalizada", Mock.TASK_FORM, at(0.5f, 0.47f),
+                    "Tras elegir \"Repetir\", ajusta \"Cada\": cada 2 días, cada 3 semanas…",
+                    "En semanal marca los días: L, X y V, por ejemplo",
+                    "En \"Termina\" elige una fecha final o déjalo en \"Nunca\"",
+                ),
+                g(
+                    "Historial de una tarea repetida", Mock.TASK_FORM, null,
+                    "Abre una tarea que se repite",
+                    "Abajo verás cada repetición: hecha ✓ u omitida ⊘ y cuándo",
+                    "Así sabes cuántas veces la cumpliste",
                 ),
                 g(
                     "Prioridades", Mock.TASK_FORM, at(0.5f, 0.56f),
@@ -244,21 +274,45 @@ object Tutorial {
                     "Las tareas completadas quedan registradas en tu \"Diario\"",
                 ),
                 g(
+                    "No lo haré", Mock.TASK_FORM, null,
+                    "Abre la tarea y toca \"No lo haré\" (o elige ⊘ al seleccionar varias)",
+                    "Se cierra sin contar como completada; si se repite, pasa a la siguiente",
+                    "La verás en \"Omitidas\". Toca ⊘ para volverla a pendiente",
+                ),
+                g(
+                    "Atrasadas y posponer", Mock.HOME, null,
+                    "En \"Hoy\" las tareas vencidas aparecen en \"Atrasadas\"",
+                    "Toca \"Posponer a hoy\" para moverlas todas a hoy",
+                    "Las completadas del día quedan abajo, plegadas: toca el encabezado para verlas",
+                ),
+                g(
+                    "Seleccionar varias", Mock.TASKS, at(0.5f, 0.3f),
+                    "Mantén pulsada una tarea para empezar a seleccionar",
+                    "Toca otras para añadirlas (o selecciona todo)",
+                    "Arriba: completar, no lo haré, cambiar fecha, lista, prioridad o eliminar",
+                ),
+                g(
+                    "Agrupar, ordenar y mover", Mock.TASKS, at(0.78f, 0.06f),
+                    "En una vista de tareas toca el ícono de ordenar arriba",
+                    "Agrupa por fecha, lista o prioridad y ordena por fecha, prioridad, título o recientes",
+                    "Elige \"Reordenar tareas…\" para ponerlas en tu propio orden",
+                ),
+                g(
                     "Listas", Mock.LISTS, at(0.5f, 0.25f),
                     "Abre ☰ y toca \"Gestionar listas / filtros\"",
-                    "Crea listas con nombre y color",
+                    "Crea listas con nombre, color e ícono",
                     "Elige la lista al crear una tarea y ábrela desde el menú ☰",
                 ),
                 g(
                     "Filtros", Mock.LISTS, at(0.5f, 0.6f),
                     "En \"Gestionar listas / filtros\" crea un filtro",
-                    "Combina fecha, prioridad mínima, lista y si incluye completadas",
+                    "Combina texto del título, fecha, prioridad mínima, lista y si incluye completadas",
                     "Ábrelo desde el menú ☰ para ver solo esas tareas",
                 ),
                 g(
                     "Todas las tareas", Mock.TASKS, null,
                     "Abre ☰ y elige \"Todas las tareas\"",
-                    "Se agrupan en Vencidas, Hoy, Mañana, Próximas, Sin fecha y Completadas",
+                    "Por fecha se agrupan en Vencidas, Hoy, Mañana, Próximas, Sin fecha, Completadas y Omitidas",
                     "Toca una tarea para editarla o eliminarla",
                 ),
                 g(
@@ -357,14 +411,20 @@ object Tutorial {
                 g(
                     "Vistas del calendario", Mock.CALENDAR, at(0.62f, 0.06f),
                     "Toca el selector de arriba y elige \"Día\", \"3 días\", \"Semana\" o \"Mes\"",
-                    "Usa las flechas para cambiar de periodo y \"Hoy\" para volver",
-                    "Toca el mes para saltar a cualquier fecha",
+                    "Usa las flechas para cambiar de periodo y \"Hoy\" para volver; toca el mes para saltar",
+                    "Pellizca la cuadrícula con dos dedos para ver más o menos horas",
                 ),
                 g(
                     "Planificar tareas", Mock.CALENDAR, at(0.4f, 0.7f),
                     "Toca un hueco de la cuadrícula para crear una tarea a esa hora",
                     "O toca + para crearla a la siguiente hora",
                     "Las tareas sin hora van en la fila \"Todo el día\"",
+                ),
+                g(
+                    "Acciones de una tarea", Mock.CALENDAR, at(0.5f, 0.45f),
+                    "Toca una tarea en la cuadrícula",
+                    "Complétala, márcala \"No lo haré\" o reprográmala ahí mismo",
+                    "Las repeticiones futuras (atenuadas) te llevan a editar la serie",
                 ),
                 g(
                     "Mover tareas", Mock.CALENDAR, at(0.5f, 0.38f),

@@ -90,7 +90,7 @@ object Backup {
             put("id", r.id); put("habitId", r.habitId); put("minutes", r.minutes); put("days", r.days)
         })
         put("lists", arr(d.lists) { l ->
-            put("id", l.id); put("name", l.name); put("color", l.color); put("sortOrder", l.sortOrder)
+            put("id", l.id); put("name", l.name); put("color", l.color); put("sortOrder", l.sortOrder); put("icon", l.icon)
         })
         put("tasks", arr(d.tasks) { t ->
             put("id", t.id); put("title", t.title); put("description", t.description)
@@ -98,11 +98,13 @@ object Backup {
             put("repeat", t.repeat.name); put("notify", t.notify); put("durationMin", t.durationMin)
             put("priority", t.priority); putNullable("listId", t.listId); put("done", t.done)
             putNullable("doneAt", t.doneAt); put("createdAt", t.createdAt)
+            put("skipped", t.skipped); put("repeatEvery", t.repeatEvery); put("repeatDays", t.repeatDays)
+            putNullable("repeatUntil", t.repeatUntil); putNullable("seriesId", t.seriesId); put("sortOrder", t.sortOrder)
         })
         put("filters", arr(d.filters) { f ->
             put("id", f.id); put("name", f.name); put("color", f.color); put("dateRange", f.dateRange.name)
             put("minPriority", f.minPriority); putNullable("listId", f.listId)
-            put("includeDone", f.includeDone); put("sortOrder", f.sortOrder)
+            put("includeDone", f.includeDone); put("sortOrder", f.sortOrder); put("text", f.text)
         })
         put("notes", arr(d.notes) { n ->
             put("id", n.id); put("timestamp", n.timestamp); put("content", n.content)
@@ -150,7 +152,10 @@ object Backup {
                     HabitReminder(id = j.getLong("id"), habitId = j.getLong("habitId"), minutes = j.getInt("minutes"), days = j.optInt("days", 0b1111111))
                 },
                 lists = list(o, "lists") { j ->
-                    TaskList(id = j.getLong("id"), name = j.getString("name"), color = j.getInt("color"), sortOrder = j.optInt("sortOrder", 0))
+                    TaskList(
+                        id = j.getLong("id"), name = j.getString("name"), color = j.getInt("color"),
+                        sortOrder = j.optInt("sortOrder", 0), icon = j.optString("icon", "list"),
+                    )
                 },
                 tasks = list(o, "tasks") { j ->
                     Task(
@@ -160,6 +165,9 @@ object Backup {
                         durationMin = j.optInt("durationMin", 30), priority = j.optInt("priority", 0),
                         listId = j.longOrNull("listId"), done = j.optBoolean("done", false), doneAt = j.longOrNull("doneAt"),
                         createdAt = j.optLong("createdAt", System.currentTimeMillis()),
+                        skipped = j.optBoolean("skipped", false), repeatEvery = j.optInt("repeatEvery", 1).coerceAtLeast(1),
+                        repeatDays = j.optInt("repeatDays", 0), repeatUntil = j.longOrNull("repeatUntil"),
+                        seriesId = j.longOrNull("seriesId"), sortOrder = j.optInt("sortOrder", 0),
                     )
                 },
                 filters = list(o, "filters") { j ->
@@ -167,6 +175,7 @@ object Backup {
                         id = j.getLong("id"), name = j.getString("name"), color = j.getInt("color"),
                         dateRange = enumOr(j.optString("dateRange"), DateRange.ANY), minPriority = j.optInt("minPriority", 0),
                         listId = j.longOrNull("listId"), includeDone = j.optBoolean("includeDone", false), sortOrder = j.optInt("sortOrder", 0),
+                        text = j.optString("text", ""),
                     )
                 },
                 notes = list(o, "notes") { j ->

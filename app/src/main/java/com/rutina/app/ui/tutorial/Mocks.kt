@@ -356,6 +356,8 @@ private fun BoxScope.Home() {
     Column(Modifier.fillMaxSize()) {
         TopBar("Hoy", listOf(Icons.Filled.Menu, Icons.Filled.BarChart), listOf(Icons.Filled.Timer))
         WeekStrip()
+        SectionHead("Atrasadas · Posponer a hoy", "1")
+        TaskRow("Pagar la luz", "Ayer", Pink)
         SectionHead("Lista de pendientes", "2")
         TaskRow("Leer el primer capítulo", "Hoy")
         TaskRow("Pagar el internet", "Hoy", Pink)
@@ -638,7 +640,10 @@ private fun BoxScope.TaskSheet() {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(Modifier.align(Alignment.CenterHorizontally).width(30.dp).height(3.dp).clip(CircleShape).background(Color.Gray))
-        Field("¿Qué quieres hacer?", "Comprar comida")
+        Field("¿Qué quieres hacer?", "Gym mañana 7am cada lunes")
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("Mañana", "7:00 a. m.", "↻ Cada semana: L").forEach { Pill(it, Color(0xFF3A3F5A), Indigo) }
+        }
         Field("Descripción (opcional)")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Pill("Hoy ▾"); Ico(Icons.Filled.Flag, Pink, 14.dp); Pill("Casa ▾")

@@ -42,6 +42,7 @@ class RutinaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        runCatching { com.rutina.app.backup.AutoBackup.schedule(this) }
         // Cada vez que cambian tus datos: reprogramar avisos y refrescar widgets.
         appScope.launch {
             combine(

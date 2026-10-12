@@ -36,6 +36,23 @@ enum class StartTab(val label: String) {
     CALENDAR("Calendario"),
 }
 
+/** Cómo se agrupan las tareas en las vistas de tareas. */
+enum class TaskGroupBy(val label: String) {
+    DATE("Fecha"),
+    LIST("Lista"),
+    PRIORITY("Prioridad"),
+    NONE("Sin agrupar"),
+}
+
+/** Cómo se ordenan las tareas dentro de cada grupo. */
+enum class TaskSortBy(val label: String) {
+    DATE("Fecha"),
+    PRIORITY("Prioridad"),
+    TITLE("Título"),
+    CREATED("Más recientes"),
+    MANUAL("Manual"),
+}
+
 /** Días con los que puede empezar la semana. */
 val WeekStarts = listOf(DayOfWeek.SUNDAY, DayOfWeek.MONDAY, DayOfWeek.SATURDAY)
 
@@ -74,6 +91,61 @@ class Prefs(context: Context) {
     /** Momento del último respaldo exportado (0 = nunca). */
     val lastBackup: StateFlow<Long> = _lastBackup
 
+    private val _autoBackupDays = MutableStateFlow(sp.getInt("autoBackupDays", 0))
+    /** Cada cuántos días se respalda solo (0 = apagado). */
+    val autoBackupDays: StateFlow<Int> = _autoBackupDays
+
+    private val _autoBackupFolder = MutableStateFlow(sp.getString("autoBackupFolder", null))
+    /** Carpeta (URI de árbol del selector de Android) donde van los respaldos automáticos. */
+    val autoBackupFolder: StateFlow<String?> = _autoBackupFolder
+
+    private val _hasBackupPassword = MutableStateFlow(sp.getString("backupPw", null) != null)
+    val hasBackupPassword: StateFlow<Boolean> = _hasBackupPassword
+
+    private val _smartInput = MutableStateFlow(sp.getBoolean("smartInput", true))
+    /** Detectar fecha, hora y repetición al escribir el título de una tarea. */
+    val smartInput: StateFlow<Boolean> = _smartInput
+
+    private val _taskGroupBy = MutableStateFlow(enumPref("taskGroupBy", TaskGroupBy.DATE))
+    val taskGroupBy: StateFlow<TaskGroupBy> = _taskGroupBy
+
+    private val _taskSortBy = MutableStateFlow(enumPref("taskSortBy", TaskSortBy.DATE))
+    val taskSortBy: StateFlow<TaskSortBy> = _taskSortBy
+
+    fun setTaskGroupBy(g: TaskGroupBy) {
+        sp.edit().putString("taskGroupBy", g.name).apply()
+        _taskGroupBy.value = g
+    }
+
+    fun setTaskSortBy(o: TaskSortBy) {
+        sp.edit().putString("taskSortBy", o.name).apply()
+        _taskSortBy.value = o
+    }
+
+    fun setSmartInput(on: Boolean) {
+        sp.edit().putBoolean("smartInput", on).apply()
+        _smartInput.value = on
+    }
+
+    fun setAutoBackupDays(d: Int) {
+        sp.edit().putInt("autoBackupDays", d).apply()
+        _autoBackupDays.value = d
+    }
+
+    fun setAutoBackupFolder(uri: String?) {
+        sp.edit().putString("autoBackupFolder", uri).apply()
+        _autoBackupFolder.value = uri
+    }
+
+    /** Guarda la contraseña de respaldo cifrada con el Keystore de Android (null = quitarla). */
+    fun setBackupPassword(pw: String?) {
+        if (pw.isNullOrEmpty()) sp.edit().remove("backupPw").apply()
+        else sp.edit().putString("backupPw", com.rutina.app.backup.SecretStore.encrypt(pw)).apply()
+        _hasBackupPassword.value = !pw.isNullOrEmpty()
+    }
+
+    fun backupPassword(): String? = sp.getString("backupPw", null)?.let { com.rutina.app.backup.SecretStore.decrypt(it) }
+
     fun setCalendarView(v: CalView) {
         sp.edit().putString("calendarView", v.name).apply()
         _calendarView.value = v
@@ -111,6 +183,9 @@ class Prefs(context: Context) {
         "weekStart" to weekStart.value.name,
         "textSize" to textSize.value.name,
         "startTab" to startTab.value.name,
+        "smartInput" to smartInput.value.toString(),
+        "taskGroupBy" to taskGroupBy.value.name,
+        "taskSortBy" to taskSortBy.value.name,
     )
 
     fun importMap(m: Map<String, String>) {
@@ -119,5 +194,8 @@ class Prefs(context: Context) {
         m["weekStart"]?.let { v -> runCatching { setWeekStart(DayOfWeek.valueOf(v)) } }
         m["textSize"]?.let { v -> runCatching { setTextSize(TextSize.valueOf(v)) } }
         m["startTab"]?.let { v -> runCatching { setStartTab(StartTab.valueOf(v)) } }
+        m["smartInput"]?.let { v -> setSmartInput(v == "true") }
+        m["taskGroupBy"]?.let { v -> runCatching { setTaskGroupBy(TaskGroupBy.valueOf(v)) } }
+        m["taskSortBy"]?.let { v -> runCatching { setTaskSortBy(TaskSortBy.valueOf(v)) } }
     }
 }

@@ -70,7 +70,7 @@ object Achievements {
 
         // Registros reales hechos por ti (sin recaídas ni lecturas automáticas de Health Connect).
         val manualLogs = logs.filter { types[it.habitId] != TrackingType.QUIT && it.note != "health" }
-        val done = tasks.filter { it.done }
+        val done = tasks.filter { it.done && !it.skipped }
         val wordCounts = notes.map { it to NoteLogic.wordCount(it.content) }
         val totalWords = wordCounts.sumOf { it.second.toLong() }
         val focusMs = sessions.sumOf { it.activeMillis }

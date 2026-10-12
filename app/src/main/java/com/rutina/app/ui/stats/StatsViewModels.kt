@@ -77,7 +77,7 @@ class StatsViewModel(db: AppDatabase) : ViewModel() {
             val pct = if (due.isEmpty()) 0.0 else due.count { done(it, d) } * 100.0 / due.size
             ChartPoint(dayLabel(d), pct)
         }
-        val doneDays = tasks.mapNotNull { t -> t.doneAt?.takeIf { t.done }?.let(HabitLogic::dateOf) }
+        val doneDays = tasks.mapNotNull { t -> t.doneAt?.takeIf { t.done && !t.skipped }?.let(HabitLogic::dateOf) }
         val tasksDaily = (13 downTo 0).map { i ->
             val d = today.minusDays(i.toLong())
             ChartPoint(dayLabel(d), doneDays.count { it == d }.toDouble())

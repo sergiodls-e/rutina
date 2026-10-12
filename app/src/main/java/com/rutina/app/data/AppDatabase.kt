@@ -12,7 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Habit::class, HabitLog::class, Task::class, TaskList::class,
         Note::class, TimerSession::class, TaskFilter::class, HabitReminder::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -76,9 +76,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v5 → v6: tareas omitidas, repetición personalizada, series, orden manual, íconos de lista y filtro por texto. */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `skipped` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `repeatEvery` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `repeatDays` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `repeatUntil` INTEGER")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `seriesId` INTEGER")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `sortOrder` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `task_lists` ADD COLUMN `icon` TEXT NOT NULL DEFAULT 'list'")
+                db.execSQL("ALTER TABLE `task_filters` ADD COLUMN `text` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "rutina.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

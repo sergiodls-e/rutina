@@ -176,7 +176,7 @@ class MainActivity : ComponentActivity() {
                             dueMinutes = a?.getInt("min")?.takeIf { it >= 0 },
                         )
                         val vm: TaskEditorViewModel = viewModel { TaskEditorViewModel(db, id, initial) }
-                        TaskEditorScreen(vm, onClose = { nav.popBackStack() })
+                        TaskEditorScreen(vm, smart = app.prefs.smartInput.value, onClose = { nav.popBackStack() })
                     }
                     composable(
                         "note/form?id={id}&habit={habit}",
@@ -239,6 +239,8 @@ class MainActivity : ComponentActivity() {
         // Trae los datos más recientes de Health Connect al volver a la app.
         val app = application as RutinaApp
         lifecycleScope.launch { runCatching { app.health.syncAll() } }
+        // Si ya tocaba un respaldo automático y el teléfono no lo hizo, se hace ahora.
+        runCatching { com.rutina.app.backup.AutoBackup.catchUp(this) }
     }
 
     override fun onNewIntent(intent: Intent) {

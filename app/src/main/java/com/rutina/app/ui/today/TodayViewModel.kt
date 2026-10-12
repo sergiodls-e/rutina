@@ -20,6 +20,10 @@ import com.rutina.app.data.HabitDisplay
 import com.rutina.app.data.Prefs
 import com.rutina.app.domain.NoteLogic
 import com.rutina.app.domain.TaskLogic
+import com.rutina.app.domain.TaskGroup
+import com.rutina.app.domain.GroupKind
+import com.rutina.app.data.TaskGroupBy
+import com.rutina.app.data.TaskSortBy
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -60,8 +64,10 @@ data class TodayState(
     val title: String = "Hoy",
     val date: LocalDate = LocalDate.now(),
     val habits: List<HabitRow> = emptyList(),
-    /** Secciones de tareas: título → tareas. */
-    val taskGroups: List<Pair<String, List<Task>>> = emptyList(),
+    /** Secciones de tareas. */
+    val taskGroups: List<TaskGroup> = emptyList(),
+    val groupBy: TaskGroupBy = TaskGroupBy.DATE,
+    val sortBy: TaskSortBy = TaskSortBy.DATE,
     val lists: List<TaskList> = emptyList(),
     val filters: List<TaskFilter> = emptyList(),
     val todayCount: Int = 0,
@@ -71,8 +77,12 @@ data class TodayState(
     val loaded: Boolean = false,
 ) {
     val showsWeek get() = view == MainView.Today || view == MainView.AllHabits
+    /** Vistas de tareas: se pueden agrupar y ordenar. */
+    val isTaskView get() = view == MainView.AllTasks || view is MainView.OfList || view is MainView.OfFilter
     val isEmpty get() = loaded && habits.isEmpty() && taskGroups.isEmpty()
 }
+
+private data class Opts(val weekStart: DayOfWeek, val groupBy: TaskGroupBy, val sortBy: TaskSortBy)
 
 private data class Base(
     val date: LocalDate,
@@ -89,6 +99,9 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
 
     fun setDisplay(d: HabitDisplay) = prefs.setHabitDisplay(d)
 
+    /** Entrada inteligente activada en Ajustes. */
+    val smartInput: StateFlow<Boolean> = prefs.smartInput
+
 
     /** Inicio de semana elegido en Ajustes. */
     val weekStart: DayOfWeek get() = prefs.weekStart.value
@@ -100,12 +113,16 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
         selected, view, db.habits().observeActive(), db.habits().observeAllLogs(), db.tasks().observeAll(),
     ) { d, v, h, l, t -> Base(d, v, h, l, t) }
 
+    private val opts = combine(prefs.weekStart, prefs.taskGroupBy, prefs.taskSortBy) { w, g, o -> Opts(w, g, o) }
+
     val state: StateFlow<TodayState> = combine(
-        base, db.tasks().observeLists(), db.tasks().observeFilters(), db.notes().observeAll(), prefs.weekStart,
-    ) { b, lists, filters, notes, w -> build(b, lists, filters, notes, w) }
+        base, db.tasks().observeLists(), db.tasks().observeFilters(), db.notes().observeAll(), opts,
+    ) { b, lists, filters, notes, o -> build(b, lists, filters, notes, o) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TodayState())
 
-    private fun build(b: Base, lists: List<TaskList>, filters: List<TaskFilter>, notes: List<Note>, weekStart: DayOfWeek): TodayState {
+    private fun build(b: Base, lists: List<TaskList>, filters: List<TaskFilter>, notes: List<Note>, o: Opts): TodayState {
+        val weekStart = o.weekStart
+        fun grouped(tasks: List<Task>, today: LocalDate) = TaskLogic.group(tasks, today, o.groupBy, o.sortBy, lists)
         val today = LocalDate.now()
         val byHabit = b.logs.groupBy { it.habitId }
         // Hábitos de tipo Diario: cada nota etiquetada cuenta sus palabras como un registro.
@@ -137,19 +154,24 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
         }
 
         val epoch = b.date.toEpochDay()
-        val todayTasks = b.tasks.filter { t ->
-            if (t.done) t.doneAt?.let { HabitLogic.dateOf(it) == b.date } == true
-            else t.dueEpochDay == epoch || (b.date == today && TaskLogic.isOverdue(t, today))
-        }
+        val overdue = if (b.date == today) TaskLogic.sorted(b.tasks.filter { TaskLogic.isOverdue(it, today) }, TaskSortBy.DATE) else emptyList()
+        val dayPending = TaskLogic.sorted(b.tasks.filter { !it.done && it.dueEpochDay == epoch }, o.sortBy)
+        val dayClosed = b.tasks.filter { it.done && it.doneAt?.let { d -> HabitLogic.dateOf(d) == b.date } == true }
+            .sortedByDescending { it.doneAt ?: 0 }
+        val todayTasks = overdue + dayPending + dayClosed
 
         var title = "Hoy"
         var habits = emptyList<HabitRow>()
-        var groups = emptyList<Pair<String, List<Task>>>()
+        var groups = emptyList<TaskGroup>()
         when (val v = b.view) {
             MainView.Today -> {
                 title = "Hoy"
                 habits = b.habits.filter { HabitLogic.isScheduled(it, b.date) }.map(::row)
-                if (todayTasks.isNotEmpty()) groups = listOf("Lista de pendientes" to todayTasks)
+                groups = listOf(
+                    TaskGroup("overdue", "Atrasadas", overdue, GroupKind.OVERDUE),
+                    TaskGroup("pending", "Lista de pendientes", dayPending),
+                    TaskGroup("closed", "Completadas", dayClosed, GroupKind.DONE),
+                ).filter { it.tasks.isNotEmpty() }
             }
             MainView.AllHabits -> {
                 title = "Todos los hábitos"
@@ -157,17 +179,17 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
             }
             MainView.AllTasks -> {
                 title = "Todas las tareas"
-                groups = TaskLogic.group(b.tasks, today)
+                groups = grouped(b.tasks, today)
             }
             is MainView.OfList -> {
                 title = lists.firstOrNull { it.id == v.id }?.name ?: "Lista"
-                groups = TaskLogic.group(b.tasks.filter { it.listId == v.id }, today)
+                groups = grouped(b.tasks.filter { it.listId == v.id }, today)
             }
             is MainView.OfFilter -> {
                 val f = filters.firstOrNull { it.id == v.id }
                 title = f?.name ?: "Filtro"
                 groups = if (f == null) emptyList()
-                else TaskLogic.group(b.tasks.filter { TaskLogic.matches(f, it, today) }, today)
+                else grouped(b.tasks.filter { TaskLogic.matches(f, it, today) }, today)
             }
             is MainView.Search -> {
                 title = "Buscar"
@@ -194,6 +216,8 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
             pendingCount = b.tasks.count { !it.done },
             habitCount = b.habits.size,
             weekStart = weekStart,
+            groupBy = o.groupBy,
+            sortBy = o.sortBy,
             loaded = true,
         )
     }
@@ -249,4 +273,50 @@ class TodayViewModel(private val db: AppDatabase, private val prefs: Prefs) : Vi
      * y crea la siguiente ocurrencia.
      */
     fun toggleTask(task: Task) = viewModelScope.launch { TaskOps.toggle(db, task) }
+
+    fun skipTask(task: Task) = viewModelScope.launch { TaskOps.skip(db, task) }
+
+    fun setGroupBy(g: TaskGroupBy) = prefs.setTaskGroupBy(g)
+    fun setSortBy(o: TaskSortBy) = prefs.setTaskSortBy(o)
+
+    // ------------------------------------------------------------ varias tareas a la vez
+
+    private fun selected(ids: Set<Long>, all: List<Task>) = all.filter { it.id in ids }
+
+    private fun allTasks(): List<Task> = state.value.taskGroups.flatMap { it.tasks }
+
+    fun completeMany(ids: Set<Long>) = viewModelScope.launch {
+        selected(ids, allTasks()).filter { !it.done }.forEach { TaskOps.complete(db, it) }
+    }
+
+    fun skipMany(ids: Set<Long>) = viewModelScope.launch {
+        selected(ids, allTasks()).filter { !it.done }.forEach { TaskOps.skip(db, it) }
+    }
+
+    fun moveMany(ids: Set<Long>, day: LocalDate?) = viewModelScope.launch {
+        TaskOps.moveTo(db, selected(ids, allTasks()), day)
+    }
+
+    fun setListMany(ids: Set<Long>, listId: Long?) = viewModelScope.launch {
+        db.tasks().updateAll(selected(ids, allTasks()).map { it.copy(listId = listId) })
+    }
+
+    fun setPriorityMany(ids: Set<Long>, p: Int) = viewModelScope.launch {
+        db.tasks().updateAll(selected(ids, allTasks()).map { it.copy(priority = p) })
+    }
+
+    fun deleteMany(ids: Set<Long>) = viewModelScope.launch {
+        db.tasks().deleteAll(selected(ids, allTasks()))
+    }
+
+    /** "Posponer": las atrasadas pasan a hoy. */
+    fun postponeOverdue() = viewModelScope.launch {
+        val today = LocalDate.now()
+        TaskOps.moveTo(db, allTasks().filter { TaskLogic.isOverdue(it, today) }, today)
+    }
+
+    /** Orden manual: guarda el nuevo orden de una sección. */
+    fun saveOrder(ordered: List<Task>) = viewModelScope.launch {
+        db.tasks().updateAll(ordered.mapIndexed { i, t -> t.copy(sortOrder = i) })
+    }
 }

@@ -154,6 +154,12 @@ fun TodayScreen(
     var fabOpen by remember { mutableStateOf(false) }
     var showTaskSheet by remember { mutableStateOf(false) }
     var actionsFor by remember { mutableStateOf<HabitRow?>(null) }
+    var selection by remember { mutableStateOf(setOf<Long>()) }
+    var expandedDone by remember { mutableStateOf(setOf<String>()) }
+    var reordering by remember { mutableStateOf(false) }
+    var pickMoveDate by remember { mutableStateOf(false) }
+    val smartInput by vm.smartInput.collectAsStateWithLifecycle()
+    LaunchedEffect(state.view) { selection = emptySet() }
     var moodFor by remember { mutableStateOf<HabitRow?>(null) }
     var weightFor by remember { mutableStateOf<HabitRow?>(null) }
     val health = rememberHealthConnector()
@@ -161,6 +167,7 @@ fun TodayScreen(
     val scope = rememberCoroutineScope()
 
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
+    BackHandler(enabled = selection.isNotEmpty()) { selection = emptySet() }
     BackHandler(enabled = !drawer.isOpen && state.view != MainView.Today) { vm.show(MainView.Today) }
 
     ModalNavigationDrawer(
@@ -179,7 +186,19 @@ fun TodayScreen(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
             topBar = {
-                TopAppBar(
+                if (selection.isNotEmpty()) SelectionBar(
+                    count = selection.size,
+                    lists = state.lists,
+                    onClose = { selection = emptySet() },
+                    onSelectAll = { selection = state.taskGroups.filter { it.kind != com.rutina.app.domain.GroupKind.DONE }.flatMap { g -> g.tasks.map { it.id } }.toSet() },
+                    onComplete = { vm.completeMany(selection); selection = emptySet() },
+                    onSkip = { vm.skipMany(selection); selection = emptySet() },
+                    onMove = { d -> vm.moveMany(selection, d); selection = emptySet() },
+                    onPickDate = { pickMoveDate = true },
+                    onList = { id -> vm.setListMany(selection, id); selection = emptySet() },
+                    onPriority = { p -> vm.setPriorityMany(selection, p); selection = emptySet() },
+                    onDelete = { vm.deleteMany(selection); selection = emptySet() },
+                ) else TopAppBar(
                     navigationIcon = {
                         Row {
                             IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, "Menú", tint = Color.White) }
@@ -197,6 +216,11 @@ fun TodayScreen(
                         )
                     },
                     actions = {
+                        if (state.isTaskView) SortMenuButton(
+                            state.groupBy, state.sortBy,
+                            onGroup = vm::setGroupBy, onSort = vm::setSortBy,
+                            onReorder = { reordering = true },
+                        )
                         IconButton(onClick = onOpenTimer) {
                             Icon(
                                 Icons.Filled.Timer, "Temporizador",
@@ -298,14 +322,26 @@ fun TodayScreen(
                                 }
                             }
                         }
-                        state.taskGroups.forEach { (title, tasks) ->
-                            item(key = "g$title") { SectionHeader(title, tasks.size) }
-                            items(tasks, key = { "t" + it.id }) { t ->
+                        state.taskGroups.forEach { g ->
+                            val collapsed = g.kind == com.rutina.app.domain.GroupKind.DONE && g.key !in expandedDone
+                            item(key = "g" + g.key) {
+                                TaskGroupHeader(
+                                    g, collapsed,
+                                    onCollapse = { expandedDone = if (g.key in expandedDone) expandedDone - g.key else expandedDone + g.key },
+                                    onPostpone = if (g.kind == com.rutina.app.domain.GroupKind.OVERDUE) ({ vm.postponeOverdue(); Unit }) else null,
+                                )
+                            }
+                            if (!collapsed) items(g.tasks, key = { "t" + it.id }) { t ->
                                 TaskRow(
                                     task = t,
                                     list = state.lists.firstOrNull { it.id == t.listId },
+                                    selected = t.id in selection,
                                     onToggle = { vm.toggleTask(t) },
-                                    onOpen = { onEditTask(t.id) },
+                                    onOpen = {
+                                        if (selection.isNotEmpty()) selection = if (t.id in selection) selection - t.id else selection + t.id
+                                        else onEditTask(t.id)
+                                    },
+                                    onLong = { selection = selection + t.id },
                                 )
                             }
                         }
@@ -315,9 +351,38 @@ fun TodayScreen(
         }
     }
 
+    if (reordering) {
+        ReorderSheet(
+            tasks = state.taskGroups.filter { it.kind != com.rutina.app.domain.GroupKind.DONE }.flatMap { it.tasks }.distinctBy { it.id },
+            onDismiss = { reordering = false },
+            onSave = { ordered ->
+                vm.saveOrder(ordered); vm.setSortBy(com.rutina.app.data.TaskSortBy.MANUAL); reordering = false
+            },
+        )
+    }
+
+    if (pickMoveDate) {
+        val st = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = LocalDate.now().atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { pickMoveDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    st.selectedDateMillis?.let { ms ->
+                        vm.moveMany(selection, java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.UTC).toLocalDate())
+                    }
+                    selection = emptySet(); pickMoveDate = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = { TextButton(onClick = { pickMoveDate = false }) { Text("Cancelar") } },
+        ) { androidx.compose.material3.DatePicker(state = st) }
+    }
+
     if (showTaskSheet) {
         val defaultDay = if (state.view == MainView.Today) state.date.toEpochDay() else null
         QuickTaskSheet(
+            smart = smartInput,
             lists = state.lists,
             initialDay = defaultDay,
             initialList = vm.currentListId(),
@@ -372,7 +437,7 @@ private fun MainDrawer(
                 item { DrawerItem("Todos los hábitos", Icons.Filled.Spa, Accent, state.habitCount, state.view == MainView.AllHabits) { onPick(MainView.AllHabits) } }
                 if (state.lists.isNotEmpty()) item { DrawerLabel("Mis listas") }
                 items(state.lists, key = { "dl" + it.id }) { l ->
-                    DrawerItem(l.name, Icons.Filled.FormatListBulleted, Color(l.color), null, state.view == MainView.OfList(l.id)) { onPick(MainView.OfList(l.id)) }
+                    DrawerItem(l.name, com.rutina.app.ui.tasks.ListIcons.of(l.icon), Color(l.color), null, state.view == MainView.OfList(l.id)) { onPick(MainView.OfList(l.id)) }
                 }
                 if (state.filters.isNotEmpty()) item { DrawerLabel("Filtros") }
                 items(state.filters, key = { "df" + it.id }) { f ->
@@ -566,50 +631,6 @@ private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit, 
 }
 
 @Composable
-private fun TaskRow(task: Task, list: TaskList?, onToggle: () -> Unit, onOpen: () -> Unit) {
-    val overdue = TaskLogic.isOverdue(task)
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(onClick = onOpen).padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(list?.let { Color(it.color) } ?: Accent),
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.TaskAlt, null, Modifier.size(18.dp), tint = Color.Black) }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                task.title,
-                textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                color = if (task.done) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
-            )
-            val parts = listOfNotNull(
-                TaskLogic.dueLabel(task),
-                if (task.repeat != RepeatRule.NEVER) "↻" else null,
-                list?.name,
-            )
-            if (parts.isNotEmpty() || task.description.isNotBlank()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (parts.isNotEmpty()) {
-                        Text(
-                            parts.joinToString(" · "), fontSize = 12.sp,
-                            color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (task.description.isNotBlank()) {
-                        Spacer(Modifier.width(6.dp))
-                        Icon(Icons.Filled.Notes, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-        if (task.priority > 0) Icon(Icons.Filled.Flag, null, Modifier.size(18.dp), tint = PriorityColors[task.priority])
-        Checkbox(checked = task.done, onCheckedChange = { onToggle() })
-    }
-}
-
-@Composable
 private fun FabOption(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
@@ -634,6 +655,7 @@ private fun FabOption(title: String, subtitle: String, icon: androidx.compose.ui
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QuickTaskSheet(
+    smart: Boolean,
     lists: List<TaskList>,
     initialDay: Long?,
     initialList: Long?,
@@ -652,7 +674,12 @@ private fun QuickTaskSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(title, { title = it }, label = { Text("¿Qué quieres hacer?") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                title, { title = it }, label = { Text("¿Qué quieres hacer?") }, modifier = Modifier.fillMaxWidth(),
+                placeholder = if (smart) ({ Text("Ej.: Gym mañana 7am, cada lunes…") }) else null,
+            )
+            val parsed = remember(title, smart) { if (smart && title.isNotBlank()) com.rutina.app.domain.SmartInput.parse(title) else null }
+            SmartChips(parsed)
             OutlinedTextField(desc, { desc = it }, label = { Text("Descripción (opcional)") }, modifier = Modifier.fillMaxWidth())
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box {
@@ -682,9 +709,10 @@ private fun QuickTaskSheet(
                 Spacer(Modifier.weight(1f))
                 FloatingActionButton(
                     onClick = {
-                        if (title.isNotBlank()) onSave(
-                            Task(title = title.trim(), description = desc.trim(), dueEpochDay = day, priority = priority, listId = listId)
-                        )
+                        if (title.isNotBlank()) {
+                            val base = Task(title = title.trim(), description = desc.trim(), dueEpochDay = day, priority = priority, listId = listId)
+                            onSave(if (parsed != null && parsed.found) parsed.applyTo(base) else base)
+                        }
                     },
                     shape = CircleShape, containerColor = Color(0xFFD6D6D6), contentColor = Color.Black,
                 ) { Icon(Icons.Filled.ArrowUpward, "Guardar") }

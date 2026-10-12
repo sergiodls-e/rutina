@@ -221,7 +221,8 @@ class JournalViewModel(private val db: AppDatabase) : ViewModel() {
                     e.log.userNote()?.let { appendLine(); appendLine(it) }
                 }
                 is TaskEntry -> {
-                    appendLine("**$time · Tarea completada:** ${e.task.title}${e.list?.let { " (${it.name})" } ?: ""}")
+                    val what = if (e.task.skipped) "Tarea omitida" else "Tarea completada"
+                    appendLine("**$time · $what:** ${e.task.title}${e.list?.let { " (${it.name})" } ?: ""}")
                     if (e.task.description.isNotBlank()) { appendLine(); appendLine(e.task.description) }
                 }
             }

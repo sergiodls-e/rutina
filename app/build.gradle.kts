@@ -79,6 +79,9 @@ dependencies {
     // Health Connect: lee pasos, distancia, etc. guardados en el propio teléfono
     implementation("androidx.health.connect:connect-client:1.1.0-alpha10")
 
+    // Respaldo automático en segundo plano (sin Internet)
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+
     val room = "2.6.1"
     implementation("androidx.room:room-runtime:$room")
     implementation("androidx.room:room-ktx:$room")

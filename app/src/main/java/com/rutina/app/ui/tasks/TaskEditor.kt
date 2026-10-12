@@ -62,6 +62,15 @@ import com.rutina.app.data.RepeatRule
 import com.rutina.app.data.Task
 import com.rutina.app.data.TaskList
 import com.rutina.app.domain.TaskLogic
+import com.rutina.app.domain.SmartInput
+import com.rutina.app.data.TaskOps
+import com.rutina.app.data.series
+import com.rutina.app.ui.today.SmartChips
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import com.rutina.app.ui.common.Dropdown
 import com.rutina.app.ui.common.FormRow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -87,8 +96,29 @@ class TaskEditorViewModel(
     val lists: StateFlow<List<TaskList>> =
         db.tasks().observeLists().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _history = MutableStateFlow<List<Task>>(emptyList())
+    /** Repeticiones anteriores de esta tarea (completadas u omitidas). */
+    val history: StateFlow<List<Task>> = _history
+
     init {
-        if (isEdit) viewModelScope.launch { db.tasks().get(editId)?.let { _task.value = it } }
+        if (isEdit) viewModelScope.launch {
+            db.tasks().get(editId)?.let { t ->
+                _task.value = t
+                db.tasks().observeSeries(t.series).collect { all -> _history.value = all.filter { it.done && it.id != editId } }
+            }
+        }
+    }
+
+    /** Completa o marca "No lo haré" guardando también los cambios hechos. */
+    fun close(skip: Boolean, onDone: () -> Unit) = viewModelScope.launch {
+        val t = _task.value.copy(title = _task.value.title.trim(), description = _task.value.description.trim())
+        if (skip) TaskOps.skip(db, t) else TaskOps.complete(db, t)
+        onDone()
+    }
+
+    fun reopen(onDone: () -> Unit) = viewModelScope.launch {
+        TaskOps.reopen(db, _task.value)
+        onDone()
     }
 
     fun update(f: (Task) -> Task) { _task.value = f(_task.value) }
@@ -110,8 +140,10 @@ private fun Long.utcToDate(): LocalDate = Instant.ofEpochMilli(this).atZone(Zone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
+fun TaskEditorScreen(vm: TaskEditorViewModel, smart: Boolean = false, onClose: () -> Unit) {
     val t by vm.task.collectAsStateWithLifecycle()
+    val history by vm.history.collectAsStateWithLifecycle()
+    var pickUntil by remember { mutableStateOf(false) }
     val lists by vm.lists.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val today = LocalDate.now()
@@ -151,6 +183,13 @@ fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
                     t.title, { v -> vm.update { it.copy(title = v) } },
                     label = { Text("¿Qué quieres hacer?") }, modifier = Modifier.fillMaxWidth(),
                 )
+                if (smart && !vm.isEdit) {
+                    val parsed = remember(t.title) { SmartInput.parse(t.title) }
+                    if (parsed.found) Row(verticalAlignment = Alignment.CenterVertically) {
+                        SmartChips(parsed, Modifier.weight(1f))
+                        TextButton(onClick = { vm.update { parsed.applyTo(it) } }) { Text("Aplicar") }
+                    }
+                }
                 OutlinedTextField(
                     t.description, { v -> vm.update { it.copy(description = v) } },
                     label = { Text("Descripción (opcional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2,
@@ -195,8 +234,62 @@ fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
                     options = RepeatRule.entries.map { TaskLogic.repeatLabel(it) to it },
                 ) { r ->
                     // Repetir necesita una fecha base: si no hay, empieza hoy.
-                    vm.update { it.copy(repeat = r, dueEpochDay = it.dueEpochDay ?: if (r != RepeatRule.NEVER) today.toEpochDay() else null) }
+                    vm.update {
+                        it.copy(
+                            repeat = r, repeatEvery = 1, repeatDays = 0,
+                            dueEpochDay = it.dueEpochDay ?: if (r != RepeatRule.NEVER) today.toEpochDay() else null,
+                        )
+                    }
                 }
+            }
+            if (t.repeat in setOf(RepeatRule.DAILY, RepeatRule.WEEKLY, RepeatRule.MONTHLY, RepeatRule.YEARLY)) {
+                FormRow("Cada") {
+                    val unit = when (t.repeat) {
+                        RepeatRule.DAILY -> "día" to "días"
+                        RepeatRule.WEEKLY -> "semana" to "semanas"
+                        RepeatRule.MONTHLY -> "mes" to "meses"
+                        else -> "año" to "años"
+                    }
+                    fun label(n: Int) = "$n ${if (n == 1) unit.first else unit.second}"
+                    Dropdown(label(t.repeatEvery), (1..12).map { label(it) to it } + listOf(label(14) to 14, label(30) to 30)) { n ->
+                        vm.update { it.copy(repeatEvery = n) }
+                    }
+                }
+                if (t.repeat == RepeatRule.WEEKLY) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf("L", "M", "X", "J", "V", "S", "D").forEachIndexed { i, d ->
+                            val on = t.repeatDays and (1 shl i) != 0
+                            Box(
+                                Modifier.weight(1f).aspectRatio(1f).clip(CircleShape)
+                                    .background(if (on) Color(0xFF9FA8DA) else MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { vm.update { it.copy(repeatDays = it.repeatDays xor (1 shl i)) } },
+                                contentAlignment = Alignment.Center,
+                            ) { Text(d, color = if (on) Color.Black else Color.White, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                    Text(
+                        if (t.repeatDays == 0) "Sin días marcados: se repite el mismo día de la semana que la fecha." else "Se repite en los días marcados.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 8.dp))
+                }
+            }
+            if (t.repeat != RepeatRule.NEVER) {
+                FormRow("Termina") {
+                    Dropdown(
+                        current = t.repeatUntil?.let { "El " + (TaskLogic.dueLabel(Task(title = "", dueEpochDay = it), today) ?: "") } ?: "Nunca",
+                        options = listOf("Nunca" to false, "Elegir fecha…" to true),
+                    ) { pick -> if (pick) pickUntil = true else vm.update { it.copy(repeatUntil = null) } }
+                }
+                Text(
+                    TaskLogic.repeatLabel(t),
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
             }
             FormRow("Prioridad") {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -234,6 +327,39 @@ fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
 
             if (vm.isEdit) {
                 Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (!t.done) {
+                        OutlinedButton(onClick = { vm.close(skip = false, onDone = onClose) }, Modifier.weight(1f)) { Text("Completar") }
+                        OutlinedButton(onClick = { vm.close(skip = true, onDone = onClose) }, Modifier.weight(1f)) { Text("No lo haré") }
+                    } else {
+                        OutlinedButton(onClick = { vm.reopen(onClose) }, Modifier.weight(1f)) {
+                            Text(if (t.skipped) "Omitida · volver a pendiente" else "Completada · volver a pendiente")
+                        }
+                    }
+                }
+                if (history.isNotEmpty()) {
+                    Text(
+                        "Historial de repeticiones", fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp),
+                    )
+                    history.take(30).forEach { h ->
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (h.skipped) "⊘" else "✓", color = if (h.skipped) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFA5D6A7), fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(10.dp))
+                            Text(TaskLogic.dueLabel(h.copy(dueMinutes = null), today) ?: "Sin fecha", Modifier.weight(1f))
+                            Text(
+                                (if (h.skipped) "Omitida" else "Hecha") + (h.doneAt?.let { " · " + java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate().let { d -> TaskLogic.dueLabel(Task(title = "", dueEpochDay = d.toEpochDay()), today) } } ?: ""),
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    val done = history.count { !it.skipped }
+                    Text(
+                        "$done hechas · ${history.size - done} omitidas",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
                 OutlinedButton(onClick = { confirmDelete = true }, Modifier.fillMaxWidth().padding(16.dp)) {
                     Text("Eliminar tarea", color = MaterialTheme.colorScheme.error)
                 }
@@ -253,6 +379,22 @@ fun TaskEditorScreen(vm: TaskEditorViewModel, onClose: () -> Unit) {
                 }) { Text("Aceptar") }
             },
             dismissButton = { TextButton(onClick = { pickDate = false }) { Text("Cancelar") } },
+        ) { DatePicker(state = st) }
+    }
+
+    if (pickUntil) {
+        val st = rememberDatePickerState(
+            initialSelectedDateMillis = (t.repeatUntil?.let(LocalDate::ofEpochDay) ?: (TaskLogic.due(t) ?: today).plusMonths(1)).toUtcMillis(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickUntil = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    st.selectedDateMillis?.let { ms -> vm.update { it.copy(repeatUntil = ms.utcToDate().toEpochDay()) } }
+                    pickUntil = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = { TextButton(onClick = { pickUntil = false }) { Text("Cancelar") } },
         ) { DatePicker(state = st) }
     }
 

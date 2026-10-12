@@ -67,6 +67,8 @@ data class TaskList(
     val name: String,
     val color: Int,
     val sortOrder: Int = 0,
+    /** Clave del ícono (ver ListIcons). */
+    @ColumnInfo(defaultValue = "'list'") val icon: String = "list",
 )
 
 @Entity(
@@ -97,7 +99,22 @@ data class Task(
     val done: Boolean = false,
     val doneAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
+    /** "No lo haré": cerrada sin completarse (también lleva done = true). */
+    @ColumnInfo(defaultValue = "0") val skipped: Boolean = false,
+    /** Cada cuántos días/semanas/meses/años se repite. */
+    @ColumnInfo(defaultValue = "1") val repeatEvery: Int = 1,
+    /** Para repetición semanal: bits 0..6 = lunes..domingo (0 = el mismo día de la fecha). */
+    @ColumnInfo(defaultValue = "0") val repeatDays: Int = 0,
+    /** Última fecha (epochDay) en que se repite; null = sin fin. */
+    val repeatUntil: Long? = null,
+    /** Id de la primera tarea de la serie (para el historial de repeticiones). */
+    val seriesId: Long? = null,
+    /** Orden manual. */
+    @ColumnInfo(defaultValue = "0") val sortOrder: Int = 0,
 )
+
+/** Id de la serie de repeticiones a la que pertenece la tarea. */
+val Task.series: Long get() = seriesId ?: id
 
 @Entity(tableName = "notes", indices = [Index("timestamp"), Index("habitId"), Index("taskId")])
 data class Note(
@@ -132,6 +149,8 @@ data class TaskFilter(
     val listId: Long? = null,
     val includeDone: Boolean = false,
     val sortOrder: Int = 0,
+    /** Texto que debe aparecer en el título (vacío = cualquiera). */
+    @ColumnInfo(defaultValue = "''") val text: String = "",
 )
 
 /** Recordatorio de un hábito: una hora y los días en que suena. */

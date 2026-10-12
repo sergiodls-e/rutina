@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -71,6 +72,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rutina.app.backup.AutoBackup
+import com.rutina.app.backup.AutoBackupOptions
+import com.rutina.app.backup.autoBackupLabel
 import com.rutina.app.data.CalView
 import com.rutina.app.data.DataKind
 import com.rutina.app.data.HabitDisplay
@@ -117,6 +121,15 @@ fun SettingsScreen(
     var askExport by remember { mutableStateOf(false) }
     var exportPassword by remember { mutableStateOf<String?>(null) }
     var askDelete by remember { mutableStateOf(false) }
+    var askPassword by remember { mutableStateOf(false) }
+    var revealPw by remember { mutableStateOf(false) }
+    var askRemovePw by remember { mutableStateOf(false) }
+    var pendingDays by remember { mutableStateOf(0) }
+    val hasPw by prefs.hasBackupPassword.collectAsState()
+    val autoDays by prefs.autoBackupDays.collectAsState()
+    val folder by prefs.autoBackupFolder.collectAsState()
+    val smartInput by prefs.smartInput.collectAsState()
+    val folderName = remember(folder) { AutoBackup.folderName(ctx, folder) }
     fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
 
     val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -124,6 +137,13 @@ fun SettingsScreen(
             toast(err ?: "Respaldo guardado ✓")
         }
         exportPassword = null
+    }
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            vm.setFolder(ctx, uri)
+            if (pendingDays > 0) vm.setAutoDays(ctx, pendingDays)
+        }
+        pendingDays = 0
     }
     val openDoc = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.readBackup(ctx.contentResolver, uri)
@@ -208,6 +228,61 @@ fun SettingsScreen(
             }
             item { LinkRow("Logros de toda la vida", "Totales, récords y rachas", onAchievements) }
 
+            item { Section("Tareas", Icons.Filled.TaskAlt) }
+            item {
+                SettingRow("Entrada inteligente", "Detecta \"mañana 7pm\", \"cada lunes\"… al escribir el título") {
+                    Switch(smartInput, { prefs.setSmartInput(it) })
+                }
+            }
+
+            item { Section("Respaldo automático", Icons.Filled.Lock) }
+            item {
+                SettingRow(
+                    "Contraseña de respaldo",
+                    if (hasPw) "Guardada cifrada en este teléfono. Se usa en todos tus respaldos." else "Sin contraseña: los respaldos no se cifran",
+                ) { ActionPill(if (hasPw) "Cambiar" else "Establecer") { askPassword = true } }
+            }
+            if (hasPw) item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { revealPw = true }) { Text("Ver contraseña") }
+                    TextButton(onClick = { askRemovePw = true }) { Text("Quitar", color = MaterialTheme.colorScheme.error) }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            }
+            item {
+                SettingRow("Frecuencia", "Se revisa una vez al día, aunque no abras la app") {
+                    Dropdown(autoBackupLabel(autoDays), AutoBackupOptions.map { it.second to it.first }) { d ->
+                        when {
+                            d == 0 -> vm.setAutoDays(ctx, 0)
+                            !hasPw -> { pendingDays = d; askPassword = true; toast("Primero establece tu contraseña de respaldo") }
+                            folder == null -> { pendingDays = d; pickFolder.launch(null) }
+                            else -> vm.setAutoDays(ctx, d)
+                        }
+                    }
+                }
+            }
+            item {
+                SettingRow("Carpeta", folderName ?: "Sin elegir") {
+                    ActionPill(if (folder == null) "Elegir" else "Cambiar") { pickFolder.launch(null) }
+                }
+            }
+            if (folder != null) item {
+                LinkRow(
+                    "Respaldar ahora",
+                    "Guarda uno en la carpeta (se conservan los últimos 5)",
+                    { vm.backupNow(ctx) { r -> AutoBackup.notify(ctx, r); toast(if (r is AutoBackup.Outcome.Ok) "Respaldo guardado ✓" else (r as AutoBackup.Outcome.Failed).message) } },
+                    icon = Icons.Filled.Backup,
+                )
+            }
+            item {
+                Text(
+                    "Rutina no puede subir a Drive por sí sola (no tiene Internet). Al terminar cada respaldo te llega un aviso con " +
+                        "el botón \"Subir a Drive\": un toque y listo.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp, 10.dp),
+                )
+            }
+
             item { Section("Respaldo y datos", Icons.Filled.Backup) }
             item {
                 LinkRow(
@@ -260,11 +335,66 @@ fun SettingsScreen(
         )
     }
 
+    if (askPassword) {
+        PasswordDialog(
+            changing = hasPw,
+            onDismiss = { askPassword = false; pendingDays = 0 },
+            onSave = { pw ->
+                askPassword = false
+                prefs.setBackupPassword(pw)
+                toast("Contraseña guardada. Apúntala en un lugar seguro.")
+                if (pendingDays > 0) {
+                    if (folder == null) pickFolder.launch(null) else { vm.setAutoDays(ctx, pendingDays); pendingDays = 0 }
+                }
+            },
+        )
+    }
+
+    if (revealPw) {
+        var shown by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { revealPw = false },
+            title = { Text("Contraseña de respaldo") },
+            text = {
+                if (shown == null) Text("¿Mostrarla en pantalla? Asegúrate de que nadie más la vea.")
+                else androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(shown ?: "", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            confirmButton = {
+                if (shown == null) TextButton(onClick = { shown = prefs.backupPassword() ?: "(no se pudo leer)" }) { Text("Mostrar") }
+                else TextButton(onClick = { revealPw = false }) { Text("Listo") }
+            },
+            dismissButton = { if (shown == null) TextButton(onClick = { revealPw = false }) { Text("Cancelar") } },
+        )
+    }
+
+    if (askRemovePw) {
+        AlertDialog(
+            onDismissRequest = { askRemovePw = false },
+            title = { Text("¿Quitar la contraseña?") },
+            text = {
+                Text(
+                    "Los próximos respaldos se guardarán sin cifrar y el respaldo automático se desactivará. " +
+                        "Los respaldos que ya creaste siguen necesitando esa contraseña.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    prefs.setBackupPassword(null); vm.setAutoDays(ctx, 0); askRemovePw = false
+                }) { Text("Quitar", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { askRemovePw = false }) { Text("Cancelar") } },
+        )
+    }
+
     if (askExport) {
         ExportDialog(
+            hasSaved = hasPw,
             onDismiss = { askExport = false },
-            onConfirm = { pw ->
+            onConfirm = { typed, useSaved ->
                 askExport = false
+                val pw = if (useSaved) prefs.backupPassword() else typed
                 exportPassword = pw
                 val suffix = if (pw.isNullOrEmpty()) "" else "-cifrado"
                 createDoc.launch("rutina-respaldo-${LocalDate.now()}$suffix.json")
@@ -418,11 +548,48 @@ private fun pinWidget(ctx: Context, receiver: Class<*>) {
 // ---------------------------------------------------------------- diálogos
 
 @Composable
-private fun ExportDialog(onDismiss: () -> Unit, onConfirm: (String?) -> Unit) {
+private fun PasswordDialog(changing: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var pw by remember { mutableStateOf("") }
+    var pw2 by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (changing) "Cambiar contraseña de respaldo" else "Contraseña de respaldo") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Se guarda cifrada con el chip de seguridad del teléfono y se usa en todos tus respaldos (manuales y automáticos).",
+                    fontSize = 14.sp,
+                )
+                OutlinedTextField(
+                    pw, { pw = it }, label = { Text("Contraseña (mín. 6)") }, singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                OutlinedTextField(
+                    pw2, { pw2 = it }, label = { Text("Repite la contraseña") }, singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    isError = pw2.isNotEmpty() && pw != pw2,
+                )
+                Text(
+                    "Apúntala en un lugar seguro: en un teléfono nuevo la necesitarás para restaurar." +
+                        if (changing) " Los respaldos anteriores siguen usando la contraseña vieja." else "",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(pw) }, enabled = pw.length >= 6 && pw == pw2) { Text("Guardar") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+    )
+}
+
+@Composable
+private fun ExportDialog(hasSaved: Boolean, onDismiss: () -> Unit, onConfirm: (String?, Boolean) -> Unit) {
+    var useSaved by remember { mutableStateOf(hasSaved) }
     var protect by remember { mutableStateOf(false) }
     var pw by remember { mutableStateOf("") }
     var pw2 by remember { mutableStateOf("") }
-    val valid = !protect || (pw.length >= 6 && pw == pw2)
+    val valid = useSaved || !protect || (pw.length >= 6 && pw == pw2)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Crear respaldo") },
@@ -433,11 +600,15 @@ private fun ExportDialog(onDismiss: () -> Unit, onConfirm: (String?) -> Unit) {
                         "En la siguiente pantalla puedes elegir Google Drive o una carpeta del teléfono.",
                     fontSize = 14.sp,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Proteger con contraseña", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                if (hasSaved) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Cifrar con tu contraseña de respaldo", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                    Switch(useSaved, { useSaved = it })
+                }
+                if (!useSaved) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (hasSaved) "Usar otra contraseña" else "Proteger con contraseña", Modifier.weight(1f), fontWeight = FontWeight.Medium)
                     Switch(protect, { protect = it })
                 }
-                if (protect) {
+                if (!useSaved && protect) {
                     OutlinedTextField(
                         pw, { pw = it }, label = { Text("Contraseña (mín. 6)") }, singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
@@ -457,7 +628,7 @@ private fun ExportDialog(onDismiss: () -> Unit, onConfirm: (String?) -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(if (protect) pw else null) }, enabled = valid) { Text("Elegir dónde guardar") }
+            TextButton(onClick = { onConfirm(if (!useSaved && protect) pw else null, useSaved) }, enabled = valid) { Text("Elegir dónde guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
     )

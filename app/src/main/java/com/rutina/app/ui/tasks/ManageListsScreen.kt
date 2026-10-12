@@ -110,7 +110,7 @@ fun ManageListsScreen(vm: ManageListsViewModel, onClose: () -> Unit) {
             item { Header("Listas") }
             if (lists.isEmpty()) item { Hint("Agrupa tareas por tema: trabajo, casa, compras…") }
             items(lists, key = { "l" + it.id }) { l ->
-                ItemRow(l.name, Color(l.color), onEdit = { editingList = l }, onDelete = { deleting = l })
+                ItemRow(l.name, Color(l.color), icon = ListIcons.of(l.icon), onEdit = { editingList = l }, onDelete = { deleting = l })
             }
             item {
                 CreateButton(Icons.Filled.FormatListBulleted, "Crear una lista", "Define una colección de tareas") {
@@ -124,6 +124,7 @@ fun ManageListsScreen(vm: ManageListsViewModel, onClose: () -> Unit) {
                     f.name, Color(f.color),
                     subtitle = buildList {
                         add(TaskLogic.rangeLabel(f.dateRange))
+                        if (f.text.isNotBlank()) add("\"${f.text}\"")
                         if (f.minPriority > 0) add("prioridad ≥ ${TaskLogic.priorityLabel(f.minPriority).lowercase()}")
                         lists.firstOrNull { it.id == f.listId }?.let { add("lista ${it.name}") }
                     }.joinToString(" · "),
@@ -165,13 +166,17 @@ private fun Header(t: String) = Text(t, fontWeight = FontWeight.Bold, fontSize =
 private fun Hint(t: String) = Text(t, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
 
 @Composable
-private fun ItemRow(name: String, color: Color, subtitle: String? = null, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun ItemRow(name: String, color: Color, subtitle: String? = null, icon: ImageVector? = null, onEdit: () -> Unit, onDelete: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable(onClick = onEdit).padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(14.dp).clip(CircleShape).background(color))
+        if (icon != null) {
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(7.dp)).background(color), contentAlignment = Alignment.Center) {
+                Icon(icon, null, Modifier.size(17.dp), tint = Color.Black)
+            }
+        } else Box(Modifier.size(14.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f).padding(vertical = 12.dp)) {
             Text(name)
@@ -208,6 +213,21 @@ private fun ColorPicker(selected: Int, onPick: (Int) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun IconPicker(selected: String, color: Color, onPick: (String) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ListIcons.all.forEach { (key, icon) ->
+            Box(
+                Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
+                    .background(if (key == selected) color else Color(0xFF2E2E2E))
+                    .clickable { onPick(key) },
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, null, Modifier.size(20.dp), tint = if (key == selected) Color.Black else Color.White) }
+        }
+    }
+}
+
 @Composable
 private fun ListDialog(initial: TaskList, onDismiss: () -> Unit, onSave: (TaskList) -> Unit) {
     var l by remember { mutableStateOf(initial) }
@@ -218,6 +238,8 @@ private fun ListDialog(initial: TaskList, onDismiss: () -> Unit, onSave: (TaskLi
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(l.name, { l = l.copy(name = it) }, label = { Text("Nombre") }, singleLine = true)
                 ColorPicker(l.color) { l = l.copy(color = it) }
+                Text("Ícono", fontWeight = FontWeight.Medium)
+                IconPicker(l.icon, Color(l.color)) { l = l.copy(icon = it) }
             }
         },
         confirmButton = { TextButton(enabled = l.name.isNotBlank(), onClick = { onSave(l.copy(name = l.name.trim())) }) { Text("Guardar") } },
@@ -234,6 +256,9 @@ private fun FilterDialog(initial: TaskFilter, lists: List<TaskList>, onDismiss: 
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(f.name, { f = f.copy(name = it) }, label = { Text("Nombre") }, singleLine = true)
+                OutlinedTextField(
+                    f.text, { f = f.copy(text = it) }, label = { Text("El título contiene (opcional)") }, singleLine = true,
+                )
                 Text("Fecha", fontWeight = FontWeight.Medium)
                 Dropdown(TaskLogic.rangeLabel(f.dateRange), DateRange.entries.map { TaskLogic.rangeLabel(it) to it }) { f = f.copy(dateRange = it) }
                 Text("Prioridad mínima", fontWeight = FontWeight.Medium)

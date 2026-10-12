@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -197,7 +198,13 @@ fun JournalScreen(
                                 time = e.time,
                                 body = null,
                                 onOpen = { onOpenTask(e.task.id) },
-                                label = { IconChip(Icons.Filled.CheckCircle, e.task.title, tint = e.list?.let { Color(it.color) } ?: Accent) },
+                                label = {
+                                    IconChip(
+                                        if (e.task.skipped) Icons.Filled.Block else Icons.Filled.CheckCircle,
+                                        if (e.task.skipped) "Omitida: ${e.task.title}" else e.task.title,
+                                        tint = e.list?.let { Color(it.color) } ?: Accent,
+                                    )
+                                },
                                 menu = listOf(
                                     MenuItem("Abrir tarea") { onOpenTask(e.task.id) },
                                     MenuItem("Marcar como pendiente") { vm.reopenTask(e.task) },

@@ -187,4 +187,8 @@ class CalendarViewModel(private val db: AppDatabase, private val prefs: Prefs) :
     }
 
     fun schedule(task: Task, day: LocalDate, minute: Int) = move(task, day, minute)
+
+    fun complete(task: Task) = viewModelScope.launch { com.rutina.app.data.TaskOps.complete(db, task) }
+    fun skip(task: Task) = viewModelScope.launch { com.rutina.app.data.TaskOps.skip(db, task) }
+    fun reopen(task: Task) = viewModelScope.launch { com.rutina.app.data.TaskOps.reopen(db, task) }
 }

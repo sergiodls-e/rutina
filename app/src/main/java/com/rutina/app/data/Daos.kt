@@ -88,6 +88,16 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun get(id: Long): Task?
 
+    /** Todas las ocurrencias de una tarea que se repite. */
+    @Query("SELECT * FROM tasks WHERE seriesId = :series OR id = :series ORDER BY dueEpochDay DESC, id DESC")
+    fun observeSeries(series: Long): Flow<List<Task>>
+
+    @Update
+    suspend fun updateAll(tasks: List<Task>)
+
+    @Delete
+    suspend fun deleteAll(tasks: List<Task>)
+
     /** Borra la ocurrencia que se generó al completar una tarea repetida (si sigue pendiente). */
     @Query("DELETE FROM tasks WHERE title = :title AND dueEpochDay = :due AND done = 0 AND createdAt >= :createdAfter")
     suspend fun deleteGeneratedNext(title: String, due: Long, createdAfter: Long)
