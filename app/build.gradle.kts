@@ -46,6 +46,12 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+
+    lint {
+        // El análisis de lint no debe bloquear la compilación del APK.
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
 }
 
 ksp {

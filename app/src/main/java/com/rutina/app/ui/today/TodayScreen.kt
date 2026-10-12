@@ -52,6 +52,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -115,6 +116,8 @@ fun TodayScreen(
     onFullTaskEditor: (title: String, listId: Long?, epochDay: Long?) -> Unit,
     onManageLists: () -> Unit,
     onWriteNote: (habitId: Long) -> Unit,
+    timerActive: Boolean,
+    onOpenTimer: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     var fabOpen by remember { mutableStateOf(false) }
@@ -153,6 +156,14 @@ fun TodayScreen(
                             title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.clickable { vm.select(LocalDate.now()) },
                         )
+                    },
+                    actions = {
+                        IconButton(onClick = onOpenTimer) {
+                            Icon(
+                                Icons.Filled.Timer, "Temporizador",
+                                tint = if (timerActive) Accent else Color.Unspecified,
+                            )
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
                 )

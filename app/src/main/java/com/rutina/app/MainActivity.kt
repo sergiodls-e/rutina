@@ -1,7 +1,13 @@
 package com.rutina.app
 
 import android.net.Uri
+import android.content.Intent
 import android.os.Bundle
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import com.rutina.app.ui.timer.TimerScreen
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -56,14 +62,30 @@ import com.rutina.app.ui.tasks.TaskEditorViewModel
 import com.rutina.app.ui.today.TodayViewModel
 
 class MainActivity : ComponentActivity() {
+
+    /** Se pone en true al abrir la app desde la notificación del temporizador. */
+    private val openTimer = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val db = (application as RutinaApp).db
+        val app = application as RutinaApp
+        val db = app.db
+        openTimer.value = intent?.getBooleanExtra(EXTRA_OPEN_TIMER, false) == true
         setContent {
             RutinaTheme {
                 val nav = rememberNavController()
+                LaunchedEffect(openTimer.value) {
+                    if (openTimer.value) {
+                        nav.navigate("timer") { launchSingleTop = true }
+                        openTimer.value = false
+                    }
+                }
+                val timerState by app.timer.state.collectAsState()
                 NavHost(nav, startDestination = "main") {
+                    composable("timer") {
+                        TimerScreen(app.timer, remember { db.habits().observeActive() }, onClose = { nav.popBackStack() })
+                    }
                     composable("main") {
                         val todayVm: TodayViewModel = viewModel { TodayViewModel(db) }
                         val journalVm: JournalViewModel = viewModel { JournalViewModel(db) }
@@ -81,6 +103,8 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onManageLists = { nav.navigate("lists") },
+                            timerActive = timerState.active,
+                            onOpenTimer = { nav.navigate("timer") { launchSingleTop = true } },
                         )
                     }
                     composable(
@@ -145,6 +169,15 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_OPEN_TIMER, false)) openTimer.value = true
+    }
+
+    companion object {
+        const val EXTRA_OPEN_TIMER = "open_timer"
+    }
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -165,6 +198,8 @@ private fun MainTabs(
     onEditTask: (Long) -> Unit,
     onFullTaskEditor: (String, Long?, Long?) -> Unit,
     onManageLists: () -> Unit,
+    timerActive: Boolean,
+    onOpenTimer: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableTabState() }
     Scaffold(
@@ -189,6 +224,8 @@ private fun MainTabs(
                 Tab.TODAY -> TodayScreen(
                     todayVm, onNewHabit, onEditHabit, onEditTask, onFullTaskEditor, onManageLists,
                     onWriteNote = { habitId -> onNewNote(habitId) },
+                    timerActive = timerActive,
+                    onOpenTimer = onOpenTimer,
                 )
                 Tab.JOURNAL -> JournalScreen(
                     journalVm,
