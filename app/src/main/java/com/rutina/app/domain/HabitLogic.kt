@@ -128,6 +128,10 @@ object HabitLogic {
         }
     }
 
+    /** "1 vez", "3 veces", "35 min". */
+    fun amountLabel(value: Double, unit: String): String =
+        "${formatNumber(value)} ${if (unit == "vez" && value != 1.0) "veces" else unit}"
+
     fun formatNumber(v: Double): String =
         if (v == Math.floor(v)) v.toLong().toString() else String.format("%.1f", v)
 }

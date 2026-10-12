@@ -2,6 +2,11 @@ package com.rutina.app.ui.habit
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -187,7 +192,7 @@ private val typeInfos = listOf(
     TypeInfo(TrackingType.MOOD, "Estado de ánimo", "Tus emociones a lo largo del tiempo", Icons.Filled.SentimentSatisfied, false),
     TypeInfo(TrackingType.WEIGHT, "Peso corporal", "Progreso y tendencia de tu peso", Icons.Filled.MonitorWeight, false),
     TypeInfo(TrackingType.HEALTH, "Health Connect", "Pasos, distancia, calorías (automático)", Icons.Filled.Favorite, false),
-    TypeInfo(TrackingType.JOURNAL, "Diario", "Cuánto escribes en tu diario", Icons.Filled.MenuBook, false),
+    TypeInfo(TrackingType.JOURNAL, "Diario", "Cuánto escribes en tu diario", Icons.Filled.MenuBook, true),
 )
 
 private val dayLetters = listOf("L", "M", "X", "J", "V", "S", "D")
@@ -258,7 +263,8 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                 }
             }
 
-            if (h.type == TrackingType.COUNT) {
+            if (h.type == TrackingType.COUNT || h.type == TrackingType.JOURNAL) {
+                val step = if (h.type == TrackingType.JOURNAL) 10.0 else 1.0
                 FormRow("Tipo de objetivo") {
                     Dropdown(
                         current = when (h.goalType) { GoalType.POSITIVE -> "👍 Positivo"; GoalType.NEGATIVE -> "👎 Negativo"; GoalType.NONE -> "⊖ Sin objetivo" },
@@ -274,12 +280,25 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                                 Modifier.border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)).padding(4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                IconButton(onClick = { vm.update { it.copy(target = (it.target - 1).coerceAtLeast(0.0)) } }) { Icon(Icons.Filled.KeyboardArrowDown, "Menos") }
-                                Text(HabitLogic.formatNumber(h.target), fontSize = 20.sp, modifier = Modifier.width(48.dp), textAlign = TextAlign.Center)
-                                IconButton(onClick = { vm.update { it.copy(target = it.target + 1) } }) { Icon(Icons.Filled.KeyboardArrowUp, "Más") }
+                                IconButton(onClick = { vm.update { it.copy(target = (it.target - step).coerceAtLeast(0.0)) } }) { Icon(Icons.Filled.KeyboardArrowDown, "Menos") }
+                                var targetText by remember(h.target) { mutableStateOf(HabitLogic.formatNumber(h.target)) }
+                                BasicTextField(
+                                    value = targetText,
+                                    onValueChange = { v ->
+                                        targetText = v
+                                        v.replace(',', '.').toDoubleOrNull()?.let { d -> vm.update { it.copy(target = d) } }
+                                    },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    textStyle = TextStyle(fontSize = 20.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.width(64.dp),
+                                )
+                                IconButton(onClick = { vm.update { it.copy(target = it.target + step) } }) { Icon(Icons.Filled.KeyboardArrowUp, "Más") }
                             }
                             Spacer(Modifier.width(12.dp))
-                            Dropdown(h.unit, Suggestions.units.map { it to it }) { u -> vm.update { it.copy(unit = u) } }
+                            if (h.type == TrackingType.JOURNAL) Text("palabras", fontSize = 18.sp)
+                            else Dropdown(h.unit, Suggestions.units.map { it to it }) { u -> vm.update { it.copy(unit = u) } }
                         }
                         Spacer(Modifier.height(8.dp))
                         Text("por", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -355,10 +374,19 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
                                 .border(2.dp, if (sel) color else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
                                 .clickable(enabled = t.ready) {
                                     vm.update {
-                                        it.copy(
-                                            type = t.type,
-                                            goalType = if (t.type == TrackingType.QUIT) GoalType.NONE else GoalType.POSITIVE,
-                                        )
+                                        val wasJournal = it.type == TrackingType.JOURNAL
+                                        when (t.type) {
+                                            TrackingType.QUIT -> it.copy(type = t.type, goalType = GoalType.NONE)
+                                            TrackingType.JOURNAL -> it.copy(
+                                                type = t.type, goalType = GoalType.POSITIVE, unit = "palabras",
+                                                target = if (wasJournal) it.target else 100.0,
+                                            )
+                                            else -> it.copy(
+                                                type = t.type, goalType = GoalType.POSITIVE,
+                                                unit = if (wasJournal) "vez" else it.unit,
+                                                target = if (wasJournal) 1.0 else it.target,
+                                            )
+                                        }
                                     }
                                     showTypes = false
                                 }

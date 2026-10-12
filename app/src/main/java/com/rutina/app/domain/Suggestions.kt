@@ -65,6 +65,13 @@ object Suggestions {
             Suggestion("Comer menos dulces", c(6), goalType = GoalType.NEGATIVE, target = 1.0),
             Suggestion("Menos redes sociales", c(5), goalType = GoalType.NEGATIVE, target = 60.0, unit = "min"),
         )),
+        SuggestionGroup("Diario", listOf(
+            Suggestion("Diario", c(7), type = TrackingType.JOURNAL, target = 100.0, unit = "palabras"),
+            Suggestion("Reflexión personal", c(2), type = TrackingType.JOURNAL, target = 50.0, unit = "palabras"),
+            Suggestion("Afirmaciones positivas", c(6), type = TrackingType.JOURNAL, target = 30.0, unit = "palabras"),
+            Suggestion("Gratitud", c(3), type = TrackingType.JOURNAL, target = 30.0, unit = "palabras"),
+            Suggestion("Diario de sueños", c(8), type = TrackingType.JOURNAL, target = 50.0, unit = "palabras"),
+        )),
         SuggestionGroup("Dejar", listOf(
             Suggestion("Dejar de fumar", c(9), type = TrackingType.QUIT, goalType = GoalType.NONE),
             Suggestion("Dejar de beber", c(0), type = TrackingType.QUIT, goalType = GoalType.NONE),
@@ -74,5 +81,5 @@ object Suggestions {
         )),
     )
 
-    val units = listOf("vez", "min", "horas", "páginas", "tazas", "vasos", "pasos", "km", "porciones", "cigarros", "bebidas", "pisos", "calorías")
+    val units = listOf("vez", "min", "horas", "páginas", "tazas", "vasos", "pasos", "km", "porciones", "cigarros", "bebidas", "pisos", "calorías", "palabras")
 }

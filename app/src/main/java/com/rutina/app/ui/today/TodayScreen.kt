@@ -52,6 +52,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -113,6 +114,7 @@ fun TodayScreen(
     onEditTask: (Long) -> Unit,
     onFullTaskEditor: (title: String, listId: Long?, epochDay: Long?) -> Unit,
     onManageLists: () -> Unit,
+    onWriteNote: (habitId: Long) -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     var fabOpen by remember { mutableStateOf(false) }
@@ -215,7 +217,11 @@ fun TodayScreen(
                                 HabitCard(
                                     row = row,
                                     onPrimary = {
-                                        if (row.habit.type == TrackingType.QUIT) actionsFor = row else vm.add(row.habit)
+                                        when (row.habit.type) {
+                                            TrackingType.QUIT -> actionsFor = row
+                                            TrackingType.JOURNAL -> onWriteNote(row.habit.id)
+                                            else -> vm.add(row.habit)
+                                        }
                                     },
                                     onLong = { actionsFor = row },
                                 )
@@ -254,7 +260,8 @@ fun TodayScreen(
         HabitActionsDialog(
             row = row,
             onDismiss = { actionsFor = null },
-            onAdd = { vm.add(row.habit, it); actionsFor = null },
+            onAdd = { amount, note -> vm.add(row.habit, amount, note); actionsFor = null },
+            onWrite = { actionsFor = null; onWriteNote(row.habit.id) },
             onUndo = { vm.undo(row.habit); actionsFor = null },
             onReset = { vm.resetQuit(row.habit); actionsFor = null },
             onEdit = { actionsFor = null; onEditHabit(row.habit.id) },
@@ -422,7 +429,7 @@ private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit) 
             Spacer(Modifier.weight(1f))
             Text(
                 if (isQuit) HabitLogic.formatElapsed(now - (h.quitSince ?: h.createdAt))
-                else "${HabitLogic.formatNumber(row.progress)} / ${HabitLogic.formatNumber(h.target)} ${h.unit}",
+                else "${HabitLogic.formatNumber(row.progress)} / ${HabitLogic.amountLabel(h.target, h.unit)}",
                 fontSize = 14.sp, textAlign = TextAlign.End, modifier = Modifier.widthIn(max = 140.dp),
             )
             Spacer(Modifier.width(8.dp))
@@ -438,6 +445,7 @@ private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit) 
                     when {
                         isQuit -> Icons.Filled.Refresh
                         filled -> Icons.Filled.Check
+                        h.type == TrackingType.JOURNAL -> Icons.Filled.EditNote
                         else -> Icons.Filled.Add
                     },
                     contentDescription = "Registrar",
@@ -581,40 +589,60 @@ private fun QuickTaskSheet(
 private fun HabitActionsDialog(
     row: HabitRow,
     onDismiss: () -> Unit,
-    onAdd: (Double) -> Unit,
+    onAdd: (Double, String?) -> Unit,
+    onWrite: () -> Unit,
     onUndo: () -> Unit,
     onReset: () -> Unit,
     onEdit: () -> Unit,
 ) {
     val h: Habit = row.habit
     var amount by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(h.name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (h.type == TrackingType.QUIT) {
-                    Text("¿Recaíste? Reiniciar pone el contador en cero y queda registrado en tu historial.")
-                } else {
-                    Text("Progreso: ${HabitLogic.formatNumber(row.progress)} / ${HabitLogic.formatNumber(h.target)} ${h.unit}")
-                    OutlinedTextField(
-                        amount, { amount = it.replace(',', '.') },
-                        label = { Text("Añadir cantidad (${h.unit})") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                    )
-                    TextButton(onClick = onUndo) { Text("Deshacer último registro") }
+                when (h.type) {
+                    TrackingType.QUIT ->
+                        Text("¿Recaíste? Reiniciar pone el contador en cero y queda registrado en tu diario.")
+                    TrackingType.JOURNAL -> {
+                        Text("Progreso: ${HabitLogic.formatNumber(row.progress)} / ${HabitLogic.amountLabel(h.target, h.unit)}")
+                        Text(
+                            "Las palabras se cuentan de las notas del diario etiquetadas con este hábito.",
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    else -> {
+                        Text("Progreso: ${HabitLogic.formatNumber(row.progress)} / ${HabitLogic.amountLabel(h.target, h.unit)}")
+                        OutlinedTextField(
+                            amount, { amount = it.replace(',', '.') },
+                            label = { Text("Cantidad (${h.unit})") },
+                            placeholder = { Text("1") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            note, { note = it },
+                            label = { Text("Nota (opcional)") },
+                            minLines = 2,
+                        )
+                        TextButton(onClick = onUndo) { Text("Deshacer último registro") }
+                    }
                 }
                 TextButton(onClick = onEdit) { Text("Editar hábito") }
             }
         },
         confirmButton = {
-            if (h.type == TrackingType.QUIT) {
-                TextButton(onClick = onReset) { Text("Reiniciar contador", color = MaterialTheme.colorScheme.error) }
-            } else {
-                TextButton(onClick = { amount.toDoubleOrNull()?.let(onAdd) ?: onAdd(1.0) }) {
-                    Text(if (amount.isBlank()) "Añadir 1" else "Añadir")
-                }
+            when (h.type) {
+                TrackingType.QUIT ->
+                    TextButton(onClick = onReset) { Text("Reiniciar contador", color = MaterialTheme.colorScheme.error) }
+                TrackingType.JOURNAL ->
+                    TextButton(onClick = onWrite) { Text("Escribir nota") }
+                else ->
+                    TextButton(onClick = { onAdd(amount.toDoubleOrNull() ?: 1.0, note.trim().ifBlank { null }) }) {
+                        Text(if (amount.isBlank()) "Añadir 1" else "Añadir")
+                    }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },

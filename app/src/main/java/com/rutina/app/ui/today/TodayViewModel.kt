@@ -6,11 +6,13 @@ import com.rutina.app.data.AppDatabase
 import com.rutina.app.data.GoalType
 import com.rutina.app.data.Habit
 import com.rutina.app.data.HabitLog
+import com.rutina.app.data.Note
 import com.rutina.app.data.Task
 import com.rutina.app.data.TaskFilter
 import com.rutina.app.data.TaskList
 import com.rutina.app.data.TrackingType
 import com.rutina.app.domain.HabitLogic
+import com.rutina.app.domain.NoteLogic
 import com.rutina.app.domain.TaskLogic
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -80,15 +82,19 @@ class TodayViewModel(private val db: AppDatabase) : ViewModel() {
     ) { d, v, h, l, t -> Base(d, v, h, l, t) }
 
     val state: StateFlow<TodayState> = combine(
-        base, db.tasks().observeLists(), db.tasks().observeFilters(),
-    ) { b, lists, filters -> build(b, lists, filters) }
+        base, db.tasks().observeLists(), db.tasks().observeFilters(), db.notes().observeAll(),
+    ) { b, lists, filters, notes -> build(b, lists, filters, notes) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TodayState())
 
-    private fun build(b: Base, lists: List<TaskList>, filters: List<TaskFilter>): TodayState {
+    private fun build(b: Base, lists: List<TaskList>, filters: List<TaskFilter>, notes: List<Note>): TodayState {
         val today = LocalDate.now()
         val byHabit = b.logs.groupBy { it.habitId }
+        // Hábitos de tipo Diario: cada nota etiquetada cuenta sus palabras como un registro.
+        val journalLogs = notes.filter { it.habitId != null }.groupBy { it.habitId!! }.mapValues { (hid, ns) ->
+            ns.map { HabitLog(habitId = hid, timestamp = it.timestamp, value = NoteLogic.wordCount(it.content).toDouble()) }
+        }
         fun row(h: Habit): HabitRow {
-            val hl = byHabit[h.id].orEmpty()
+            val hl = if (h.type == TrackingType.JOURNAL) journalLogs[h.id].orEmpty() else byHabit[h.id].orEmpty()
             val p = HabitLogic.progress(h, hl, b.date, weekStart)
             return HabitRow(
                 habit = h,
@@ -173,8 +179,8 @@ class TodayViewModel(private val db: AppDatabase) : ViewModel() {
         if (date == LocalDate.now()) System.currentTimeMillis()
         else date.atTime(LocalTime.NOON).atZone(HabitLogic.zone).toInstant().toEpochMilli()
 
-    fun add(habit: Habit, amount: Double = 1.0) = viewModelScope.launch {
-        db.habits().insertLog(HabitLog(habitId = habit.id, timestamp = stampFor(selected.value), value = amount))
+    fun add(habit: Habit, amount: Double = 1.0, note: String? = null) = viewModelScope.launch {
+        db.habits().insertLog(HabitLog(habitId = habit.id, timestamp = stampFor(selected.value), value = amount, note = note))
     }
 
     fun undo(habit: Habit) = viewModelScope.launch {

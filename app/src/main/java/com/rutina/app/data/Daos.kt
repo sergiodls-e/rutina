@@ -12,6 +12,9 @@ interface HabitDao {
     @Query("SELECT * FROM habits WHERE archived = 0 ORDER BY sortOrder, id")
     fun observeActive(): Flow<List<Habit>>
 
+    @Query("SELECT * FROM habits ORDER BY sortOrder, id")
+    fun observeAll(): Flow<List<Habit>>
+
     @Query("SELECT * FROM habits WHERE archived = 1 ORDER BY name")
     fun observeArchived(): Flow<List<Habit>>
 
@@ -38,6 +41,12 @@ interface HabitDao {
 
     @Insert
     suspend fun insertLog(log: HabitLog): Long
+
+    @Update
+    suspend fun updateLog(log: HabitLog)
+
+    @Delete
+    suspend fun deleteLog(log: HabitLog)
 
     @Query(
         "DELETE FROM habit_logs WHERE id = (SELECT id FROM habit_logs " +
@@ -93,6 +102,9 @@ interface TaskDao {
 interface NoteDao {
     @Query("SELECT * FROM notes ORDER BY timestamp DESC")
     fun observeAll(): Flow<List<Note>>
+
+    @Query("SELECT * FROM notes WHERE id = :id")
+    suspend fun get(id: Long): Note?
 
     @Insert
     suspend fun insert(note: Note): Long

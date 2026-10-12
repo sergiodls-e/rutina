@@ -44,6 +44,10 @@ import com.rutina.app.ui.habit.HabitFormScreen
 import com.rutina.app.ui.habit.SuggestionsScreen
 import com.rutina.app.ui.theme.RutinaTheme
 import com.rutina.app.ui.today.TodayScreen
+import com.rutina.app.ui.journal.JournalScreen
+import com.rutina.app.ui.journal.JournalViewModel
+import com.rutina.app.ui.journal.NoteEditorScreen
+import com.rutina.app.ui.journal.NoteEditorViewModel
 import com.rutina.app.data.Task
 import com.rutina.app.ui.tasks.ManageListsScreen
 import com.rutina.app.ui.tasks.ManageListsViewModel
@@ -62,8 +66,12 @@ class MainActivity : ComponentActivity() {
                 NavHost(nav, startDestination = "main") {
                     composable("main") {
                         val todayVm: TodayViewModel = viewModel { TodayViewModel(db) }
+                        val journalVm: JournalViewModel = viewModel { JournalViewModel(db) }
                         MainTabs(
                             todayVm = todayVm,
+                            journalVm = journalVm,
+                            onNewNote = { habitId -> nav.navigate("note/form?habit=${habitId ?: -1L}") },
+                            onEditNote = { id -> nav.navigate("note/form?id=$id") },
                             onNewHabit = { nav.navigate("habit/suggest") },
                             onEditHabit = { id -> nav.navigate("habit/form?id=$id") },
                             onEditTask = { id -> nav.navigate("task/form?id=$id") },
@@ -93,6 +101,18 @@ class MainActivity : ComponentActivity() {
                         )
                         val vm: TaskEditorViewModel = viewModel { TaskEditorViewModel(db, id, initial) }
                         TaskEditorScreen(vm, onClose = { nav.popBackStack() })
+                    }
+                    composable(
+                        "note/form?id={id}&habit={habit}",
+                        arguments = listOf(
+                            navArgument("id") { type = NavType.LongType; defaultValue = 0L },
+                            navArgument("habit") { type = NavType.LongType; defaultValue = -1L },
+                        ),
+                    ) { entry ->
+                        val id = entry.arguments?.getLong("id") ?: 0L
+                        val habit = entry.arguments?.getLong("habit")?.takeIf { it > 0 }
+                        val vm: NoteEditorViewModel = viewModel { NoteEditorViewModel(db, id, habit) }
+                        NoteEditorScreen(vm, onClose = { nav.popBackStack() })
                     }
                     composable("lists") {
                         val vm: ManageListsViewModel = viewModel { ManageListsViewModel(db) }
@@ -137,6 +157,9 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 private fun MainTabs(
     todayVm: TodayViewModel,
+    journalVm: JournalViewModel,
+    onNewNote: (habitId: Long?) -> Unit,
+    onEditNote: (Long) -> Unit,
     onNewHabit: () -> Unit,
     onEditHabit: (Long) -> Unit,
     onEditTask: (Long) -> Unit,
@@ -163,8 +186,16 @@ private fun MainTabs(
     ) { pad ->
         Box(Modifier.padding(pad)) {
             when (Tab.entries[tab]) {
-                Tab.TODAY -> TodayScreen(todayVm, onNewHabit, onEditHabit, onEditTask, onFullTaskEditor, onManageLists)
-                Tab.JOURNAL -> ComingSoon("Diario", "Llega en la Fase 3: notas con formato, etiquetas, búsqueda y exportar.")
+                Tab.TODAY -> TodayScreen(
+                    todayVm, onNewHabit, onEditHabit, onEditTask, onFullTaskEditor, onManageLists,
+                    onWriteNote = { habitId -> onNewNote(habitId) },
+                )
+                Tab.JOURNAL -> JournalScreen(
+                    journalVm,
+                    onNewNote = { onNewNote(null) },
+                    onEditNote = onEditNote,
+                    onOpenTask = onEditTask,
+                )
                 Tab.CALENDAR -> ComingSoon("Calendario", "Llega en la Fase 6: vista semanal por horas y programar tareas.")
                 Tab.SETTINGS -> ComingSoon(
                     "Ajustes",

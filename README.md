@@ -22,7 +22,7 @@ app/src/main/java/com/rutina/app/
 ## Fases
 1. ✅ Base, Hoy, hábitos de Recuento y Dejar, tareas rápidas
 2. ✅ Tareas completas, listas y filtros
-3. Diario
+3. ✅ Diario
 4. Temporizador
 5. Vistas semanal/mensual/anual y estadísticas
 6. Calendario
