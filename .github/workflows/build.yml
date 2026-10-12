@@ -37,7 +37,16 @@ jobs:
       - name: Compilar
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        run: gradle :app:assembleRelease --stacktrace
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease 2>&1 | tee build.log
+
+      - name: Resumir errores
+        if: failure()
+        run: |
+          grep -E "^e: |What went wrong|Caused by|error:" -A2 build.log | head -40 | while IFS= read -r l; do
+            echo "::error::${l}"
+          done
 
       - name: Borrar firma temporal
         if: always()

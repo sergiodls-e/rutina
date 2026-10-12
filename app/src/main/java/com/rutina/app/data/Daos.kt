@@ -61,8 +61,32 @@ interface TaskDao {
     @Delete
     suspend fun delete(task: Task)
 
+    @Query("SELECT * FROM tasks WHERE id = :id")
+    suspend fun get(id: Long): Task?
+
     @Query("SELECT * FROM task_lists ORDER BY sortOrder, id")
     fun observeLists(): Flow<List<TaskList>>
+
+    @Insert
+    suspend fun insertList(list: TaskList): Long
+
+    @Update
+    suspend fun updateList(list: TaskList)
+
+    @Delete
+    suspend fun deleteList(list: TaskList)
+
+    @Query("SELECT * FROM task_filters ORDER BY sortOrder, id")
+    fun observeFilters(): Flow<List<TaskFilter>>
+
+    @Insert
+    suspend fun insertFilter(filter: TaskFilter): Long
+
+    @Update
+    suspend fun updateFilter(filter: TaskFilter)
+
+    @Delete
+    suspend fun deleteFilter(filter: TaskFilter)
 }
 
 @Dao

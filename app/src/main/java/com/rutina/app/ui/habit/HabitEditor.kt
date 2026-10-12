@@ -80,6 +80,9 @@ import com.rutina.app.domain.HabitLogic
 import com.rutina.app.domain.Palette
 import com.rutina.app.domain.Suggestion
 import com.rutina.app.domain.Suggestions
+import com.rutina.app.ui.common.Dropdown
+import com.rutina.app.ui.common.FormRow
+import com.rutina.app.ui.common.Pill
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -387,37 +390,6 @@ fun HabitFormScreen(vm: HabitEditorViewModel, onClose: () -> Unit) {
             confirmButton = { TextButton(onClick = { vm.delete(onClose) }) { Text("Eliminar", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } },
         )
-    }
-}
-
-@Composable
-private fun FormRow(label: String, content: @Composable () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(16.dp, 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-        content()
-    }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-}
-
-@Composable
-private fun Pill(onClick: () -> Unit, content: @Composable () -> Unit) {
-    Row(
-        Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) { content() }
-}
-
-@Composable
-private fun <T> Dropdown(current: String, options: List<Pair<String, T>>, onPick: (T) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        Pill(onClick = { open = true }) { Text(current); Spacer(Modifier.width(8.dp)); Icon(Icons.Filled.KeyboardArrowDown, null) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            options.forEach { (label, value) ->
-                DropdownMenuItem(text = { Text(label) }, onClick = { onPick(value); open = false })
-            }
-        }
     }
 }
 

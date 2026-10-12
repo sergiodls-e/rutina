@@ -1,6 +1,31 @@
 package com.rutina.app.ui.today
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import com.rutina.app.data.RepeatRule
+import com.rutina.app.data.TaskList
+import com.rutina.app.domain.TaskLogic
+import com.rutina.app.ui.tasks.PriorityColors
+import com.rutina.app.ui.theme.Accent
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -85,79 +110,128 @@ fun TodayScreen(
     vm: TodayViewModel,
     onNewHabit: () -> Unit,
     onEditHabit: (Long) -> Unit,
+    onEditTask: (Long) -> Unit,
+    onFullTaskEditor: (title: String, listId: Long?, epochDay: Long?) -> Unit,
+    onManageLists: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     var fabOpen by remember { mutableStateOf(false) }
     var showTaskSheet by remember { mutableStateOf(false) }
     var actionsFor by remember { mutableStateOf<HabitRow?>(null) }
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (state.date == LocalDate.now()) "Hoy" else state.date.format(
-                            java.time.format.DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", es)
-                        ).replaceFirstChar { it.uppercase() },
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { vm.select(LocalDate.now()) },
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
+    BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
+    BackHandler(enabled = !drawer.isOpen && state.view != MainView.Today) { vm.show(MainView.Today) }
+
+    ModalNavigationDrawer(
+        drawerState = drawer,
+        drawerContent = {
+            MainDrawer(
+                state = state,
+                onPick = { v -> vm.show(v); scope.launch { drawer.close() } },
+                onManage = { scope.launch { drawer.close() }; onManageLists() },
             )
         },
-        floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                AnimatedVisibility(fabOpen) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.End) {
-                        FabOption("Tarea", "Crea una lista de pendientes", Icons.Filled.TaskAlt) {
-                            fabOpen = false; showTaskSheet = true
-                        }
-                        FabOption("Hábito", "Registra una actividad recurrente", Icons.Filled.Spa) {
-                            fabOpen = false; onNewHabit()
+    ) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+            topBar = {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, "Menú") }
+                    },
+                    title = {
+                        val title = if (state.view == MainView.Today && state.date != LocalDate.now()) {
+                            state.date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", es))
+                                .replaceFirstChar { it.uppercase() }
+                        } else state.title
+                        Text(
+                            title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { vm.select(LocalDate.now()) },
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
+                )
+            },
+            floatingActionButton = {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AnimatedVisibility(fabOpen) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.End) {
+                            FabOption("Tarea", "Crea una lista de pendientes", Icons.Filled.TaskAlt) {
+                                fabOpen = false; showTaskSheet = true
+                            }
+                            FabOption("Hábito", "Registra una actividad recurrente", Icons.Filled.Spa) {
+                                fabOpen = false; onNewHabit()
+                            }
                         }
                     }
+                    FloatingActionButton(
+                        onClick = { fabOpen = !fabOpen },
+                        shape = CircleShape,
+                        containerColor = Color(0xFFD6D6D6),
+                        contentColor = Color.Black,
+                    ) { Icon(if (fabOpen) Icons.Filled.Close else Icons.Filled.Add, contentDescription = "Crear") }
                 }
-                FloatingActionButton(
-                    onClick = { fabOpen = !fabOpen },
-                    shape = CircleShape,
-                    containerColor = Color(0xFFD6D6D6),
-                    contentColor = Color.Black,
-                ) { Icon(if (fabOpen) Icons.Filled.Close else Icons.Filled.Add, contentDescription = "Crear") }
-            }
-        },
-    ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize()) {
-            WeekStrip(state.date, vm) { vm.select(it) }
-            if (state.loaded && state.habits.isEmpty() && state.tasks.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No hay tareas ni hábitos", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-                        Text("Toca + para añadir", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+            },
+        ) { pad ->
+            Column(Modifier.padding(pad).fillMaxSize()) {
+                if (state.showsWeek) WeekStrip(state.date, vm) { vm.select(it) }
+                (state.view as? MainView.Search)?.let { s ->
+                    OutlinedTextField(
+                        s.query, { vm.show(MainView.Search(it)) },
+                        placeholder = { Text("Buscar tareas y hábitos…") },
+                        leadingIcon = { Icon(Icons.Filled.Search, null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    )
                 }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 120.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (state.habits.isNotEmpty()) {
-                        item { SectionHeader("Hábitos", state.habits.size) }
-                        items(state.habits, key = { "h" + it.habit.id }) { row ->
-                            HabitCard(
-                                row = row,
-                                onPrimary = {
-                                    if (row.habit.type == TrackingType.QUIT) actionsFor = row else vm.add(row.habit)
+                if (state.isEmpty) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                when (state.view) {
+                                    MainView.Today -> "No hay tareas ni hábitos"
+                                    MainView.AllHabits -> "No hay hábitos"
+                                    is MainView.Search -> "Sin resultados"
+                                    else -> "No hay tareas"
                                 },
-                                onLong = { actionsFor = row },
+                                fontWeight = FontWeight.SemiBold, fontSize = 18.sp,
                             )
+                            if (state.view !is MainView.Search) {
+                                Text("Toca + para añadir", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
-                    if (state.tasks.isNotEmpty()) {
-                        item { SectionHeader("Lista de pendientes", state.tasks.size) }
-                        items(state.tasks, key = { "t" + it.id }) { t -> TaskRow(t) { vm.toggleTask(t) } }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 120.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (state.habits.isNotEmpty()) {
+                            item { SectionHeader(if (state.view == MainView.Today) "Hábitos diarios" else "Hábitos", state.habits.size) }
+                            items(state.habits, key = { "h" + it.habit.id }) { row ->
+                                HabitCard(
+                                    row = row,
+                                    onPrimary = {
+                                        if (row.habit.type == TrackingType.QUIT) actionsFor = row else vm.add(row.habit)
+                                    },
+                                    onLong = { actionsFor = row },
+                                )
+                            }
+                        }
+                        state.taskGroups.forEach { (title, tasks) ->
+                            item(key = "g$title") { SectionHeader(title, tasks.size) }
+                            items(tasks, key = { "t" + it.id }) { t ->
+                                TaskRow(
+                                    task = t,
+                                    list = state.lists.firstOrNull { it.id == t.listId },
+                                    onToggle = { vm.toggleTask(t) },
+                                    onOpen = { onEditTask(t.id) },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -165,9 +239,14 @@ fun TodayScreen(
     }
 
     if (showTaskSheet) {
+        val defaultDay = if (state.view == MainView.Today) state.date.toEpochDay() else null
         QuickTaskSheet(
+            lists = state.lists,
+            initialDay = defaultDay,
+            initialList = vm.currentListId(),
             onDismiss = { showTaskSheet = false },
-            onSave = { title, desc, today -> vm.addTask(title, desc, today); showTaskSheet = false },
+            onSave = { vm.addTask(it); showTaskSheet = false },
+            onMore = { title, listId, day -> showTaskSheet = false; onFullTaskEditor(title, listId, day) },
         )
     }
 
@@ -180,6 +259,71 @@ fun TodayScreen(
             onReset = { vm.resetQuit(row.habit); actionsFor = null },
             onEdit = { actionsFor = null; onEditHabit(row.habit.id) },
         )
+    }
+}
+
+@Composable
+private fun MainDrawer(state: TodayState, onPick: (MainView) -> Unit, onManage: () -> Unit) {
+    ModalDrawerSheet(drawerContainerColor = Color(0xFF181818), modifier = Modifier.width(300.dp)) {
+        Column(Modifier.fillMaxHeight().padding(12.dp)) {
+            Text("Listas / Filtros", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
+            LazyColumn(Modifier.weight(1f)) {
+                item { DrawerItem("Vista de hoy", Icons.Filled.Today, Accent, state.todayCount, state.view == MainView.Today) { onPick(MainView.Today) } }
+                item { DrawerItem("Todas las tareas", Icons.Filled.TaskAlt, Accent, state.pendingCount, state.view == MainView.AllTasks) { onPick(MainView.AllTasks) } }
+                item { DrawerItem("Todos los hábitos", Icons.Filled.Spa, Accent, state.habitCount, state.view == MainView.AllHabits) { onPick(MainView.AllHabits) } }
+                if (state.lists.isNotEmpty()) item { DrawerLabel("Mis listas") }
+                items(state.lists, key = { "dl" + it.id }) { l ->
+                    DrawerItem(l.name, Icons.Filled.FormatListBulleted, Color(l.color), null, state.view == MainView.OfList(l.id)) { onPick(MainView.OfList(l.id)) }
+                }
+                if (state.filters.isNotEmpty()) item { DrawerLabel("Filtros") }
+                items(state.filters, key = { "df" + it.id }) { f ->
+                    DrawerItem(f.name, Icons.Filled.FilterAlt, Color(f.color), null, state.view == MainView.OfFilter(f.id)) { onPick(MainView.OfFilter(f.id)) }
+                }
+            }
+            Surface(
+                onClick = { onPick(MainView.Search("")) },
+                shape = RoundedCornerShape(12.dp),
+                color = Color.Transparent,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF444444)),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Search, null); Spacer(Modifier.width(10.dp))
+                    Text("Buscar tareas y hábitos…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Surface(
+                onClick = onManage, shape = RoundedCornerShape(12.dp), color = Color(0xFFD6D6D6), contentColor = Color.Black,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(10.dp)); Text("Gestionar listas / filtros", fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerLabel(t: String) =
+    Text(t, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(12.dp, 16.dp, 12.dp, 4.dp))
+
+@Composable
+private fun DrawerItem(
+    label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, count: Int?, selected: Boolean, onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .background(if (selected) Color(0xFF2A2A2A) else Color.Transparent)
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(18.dp), tint = Color.Black)
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(label, Modifier.weight(1f), fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (count != null) Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -305,20 +449,45 @@ private fun HabitCard(row: HabitRow, onPrimary: () -> Unit, onLong: () -> Unit) 
 }
 
 @Composable
-private fun TaskRow(task: Task, onToggle: () -> Unit) {
+private fun TaskRow(task: Task, list: TaskList?, onToggle: () -> Unit, onOpen: () -> Unit) {
+    val overdue = TaskLogic.isOverdue(task)
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .clickable(onClick = onOpen).padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.TaskAlt, null, tint = MaterialTheme.colorScheme.primary)
+        Box(
+            Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(list?.let { Color(it.color) } ?: Accent),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.TaskAlt, null, Modifier.size(18.dp), tint = Color.Black) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(task.title, textDecoration = if (task.done) TextDecoration.LineThrough else null)
-            if (task.description.isNotBlank()) {
-                Text(task.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Text(
+                task.title,
+                textDecoration = if (task.done) TextDecoration.LineThrough else null,
+                color = if (task.done) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
+            )
+            val parts = listOfNotNull(
+                TaskLogic.dueLabel(task),
+                if (task.repeat != RepeatRule.NEVER) "↻" else null,
+                list?.name,
+            )
+            if (parts.isNotEmpty() || task.description.isNotBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (parts.isNotEmpty()) {
+                        Text(
+                            parts.joinToString(" · "), fontSize = 12.sp,
+                            color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (task.description.isNotBlank()) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.Filled.Notes, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
+        if (task.priority > 0) Icon(Icons.Filled.Flag, null, Modifier.size(18.dp), tint = PriorityColors[task.priority])
         Checkbox(checked = task.done, onCheckedChange = { onToggle() })
     }
 }
@@ -347,22 +516,63 @@ private fun FabOption(title: String, subtitle: String, icon: androidx.compose.ui
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QuickTaskSheet(onDismiss: () -> Unit, onSave: (String, String, Boolean) -> Unit) {
+private fun QuickTaskSheet(
+    lists: List<TaskList>,
+    initialDay: Long?,
+    initialList: Long?,
+    onDismiss: () -> Unit,
+    onSave: (Task) -> Unit,
+    onMore: (title: String, listId: Long?, epochDay: Long?) -> Unit,
+) {
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
-    var today by remember { mutableStateOf(true) }
+    var day by remember { mutableStateOf(initialDay) }
+    var priority by remember { mutableIntStateOf(0) }
+    var listId by remember { mutableStateOf(initialList) }
+    var dateMenu by remember { mutableStateOf(false) }
+    var listMenu by remember { mutableStateOf(false) }
+    val today = LocalDate.now()
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(title, { title = it }, label = { Text("¿Qué quieres hacer?") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(desc, { desc = it }, label = { Text("Descripción (opcional)") }, modifier = Modifier.fillMaxWidth())
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(selected = today, onClick = { today = !today }, label = { Text(if (today) "Hoy" else "Sin fecha") })
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box {
+                    FilterChip(
+                        selected = day != null, onClick = { dateMenu = true },
+                        label = { Text(day?.let { TaskLogic.dueLabel(Task(title = "", dueEpochDay = it), today) } ?: "Sin fecha") },
+                    )
+                    DropdownMenu(dateMenu, { dateMenu = false }) {
+                        listOf("Hoy" to today.toEpochDay(), "Mañana" to today.plusDays(1).toEpochDay(), "Sin fecha" to null)
+                            .forEach { (l, v) -> DropdownMenuItem(text = { Text(l) }, onClick = { day = v; dateMenu = false }) }
+                        DropdownMenuItem(text = { Text("Otra fecha u hora…") }, onClick = { dateMenu = false; onMore(title, listId, day) })
+                    }
+                }
+                IconButton(onClick = { priority = (priority + 1) % 4 }) {
+                    Icon(if (priority > 0) Icons.Filled.Flag else Icons.Outlined.Flag, "Prioridad", tint = PriorityColors[priority])
+                }
+                Box {
+                    FilterChip(
+                        selected = listId != null, onClick = { listMenu = true },
+                        label = { Text(lists.firstOrNull { it.id == listId }?.name ?: "Lista") },
+                    )
+                    DropdownMenu(listMenu, { listMenu = false }) {
+                        DropdownMenuItem(text = { Text("Ninguna") }, onClick = { listId = null; listMenu = false })
+                        lists.forEach { l -> DropdownMenuItem(text = { Text(l.name) }, onClick = { listId = l.id; listMenu = false }) }
+                    }
+                }
                 Spacer(Modifier.weight(1f))
                 FloatingActionButton(
-                    onClick = { if (title.isNotBlank()) onSave(title, desc, today) },
+                    onClick = {
+                        if (title.isNotBlank()) onSave(
+                            Task(title = title.trim(), description = desc.trim(), dueEpochDay = day, priority = priority, listId = listId)
+                        )
+                    },
                     shape = CircleShape, containerColor = Color(0xFFD6D6D6), contentColor = Color.Black,
-                ) { Text("↑", fontSize = 22.sp) }
+                ) { Icon(Icons.Filled.ArrowUpward, "Guardar") }
             }
+            TextButton(onClick = { onMore(title, listId, day) }) { Text("Más opciones (hora, repetir, aviso)…") }
         }
     }
 }

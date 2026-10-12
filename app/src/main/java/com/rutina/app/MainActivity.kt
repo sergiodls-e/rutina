@@ -1,5 +1,6 @@
 package com.rutina.app
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -43,6 +44,11 @@ import com.rutina.app.ui.habit.HabitFormScreen
 import com.rutina.app.ui.habit.SuggestionsScreen
 import com.rutina.app.ui.theme.RutinaTheme
 import com.rutina.app.ui.today.TodayScreen
+import com.rutina.app.data.Task
+import com.rutina.app.ui.tasks.ManageListsScreen
+import com.rutina.app.ui.tasks.ManageListsViewModel
+import com.rutina.app.ui.tasks.TaskEditorScreen
+import com.rutina.app.ui.tasks.TaskEditorViewModel
 import com.rutina.app.ui.today.TodayViewModel
 
 class MainActivity : ComponentActivity() {
@@ -60,7 +66,37 @@ class MainActivity : ComponentActivity() {
                             todayVm = todayVm,
                             onNewHabit = { nav.navigate("habit/suggest") },
                             onEditHabit = { id -> nav.navigate("habit/form?id=$id") },
+                            onEditTask = { id -> nav.navigate("task/form?id=$id") },
+                            onFullTaskEditor = { title, listId, day ->
+                                nav.navigate(
+                                    "task/form?title=${Uri.encode(title)}&list=${listId ?: -1L}&day=${day ?: Long.MIN_VALUE}"
+                                )
+                            },
+                            onManageLists = { nav.navigate("lists") },
                         )
+                    }
+                    composable(
+                        "task/form?id={id}&title={title}&list={list}&day={day}",
+                        arguments = listOf(
+                            navArgument("id") { type = NavType.LongType; defaultValue = 0L },
+                            navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                            navArgument("list") { type = NavType.LongType; defaultValue = -1L },
+                            navArgument("day") { type = NavType.LongType; defaultValue = Long.MIN_VALUE },
+                        ),
+                    ) { entry ->
+                        val a = entry.arguments
+                        val id = a?.getLong("id") ?: 0L
+                        val initial = Task(
+                            title = a?.getString("title").orEmpty(),
+                            listId = a?.getLong("list")?.takeIf { it > 0 },
+                            dueEpochDay = a?.getLong("day")?.takeIf { it != Long.MIN_VALUE },
+                        )
+                        val vm: TaskEditorViewModel = viewModel { TaskEditorViewModel(db, id, initial) }
+                        TaskEditorScreen(vm, onClose = { nav.popBackStack() })
+                    }
+                    composable("lists") {
+                        val vm: ManageListsViewModel = viewModel { ManageListsViewModel(db) }
+                        ManageListsScreen(vm, onClose = { nav.popBackStack() })
                     }
                     composable("habit/suggest") {
                         SuggestionsScreen(
@@ -99,7 +135,14 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-private fun MainTabs(todayVm: TodayViewModel, onNewHabit: () -> Unit, onEditHabit: (Long) -> Unit) {
+private fun MainTabs(
+    todayVm: TodayViewModel,
+    onNewHabit: () -> Unit,
+    onEditHabit: (Long) -> Unit,
+    onEditTask: (Long) -> Unit,
+    onFullTaskEditor: (String, Long?, Long?) -> Unit,
+    onManageLists: () -> Unit,
+) {
     var tab by rememberSaveable { mutableTabState() }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -120,7 +163,7 @@ private fun MainTabs(todayVm: TodayViewModel, onNewHabit: () -> Unit, onEditHabi
     ) { pad ->
         Box(Modifier.padding(pad)) {
             when (Tab.entries[tab]) {
-                Tab.TODAY -> TodayScreen(todayVm, onNewHabit, onEditHabit)
+                Tab.TODAY -> TodayScreen(todayVm, onNewHabit, onEditHabit, onEditTask, onFullTaskEditor, onManageLists)
                 Tab.JOURNAL -> ComingSoon("Diario", "Llega en la Fase 3: notas con formato, etiquetas, búsqueda y exportar.")
                 Tab.CALENDAR -> ComingSoon("Calendario", "Llega en la Fase 6: vista semanal por horas y programar tareas.")
                 Tab.SETTINGS -> ComingSoon(

@@ -18,6 +18,9 @@ enum class ScheduleType { ALL_DAYS, SPECIFIC_DAYS, DAYS_PER_WEEK }
 
 enum class RepeatRule { NEVER, DAILY, WEEKDAYS, WEEKLY, MONTHLY, YEARLY }
 
+/** Rango de fechas que acepta un filtro de tareas. */
+enum class DateRange { ANY, OVERDUE, TODAY, NEXT_7_DAYS, NO_DATE }
+
 @Entity(tableName = "habits")
 data class Habit(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -111,4 +114,19 @@ data class TimerSession(
     val end: Long,
     val activeMillis: Long,
     val countdown: Boolean,
+)
+
+/** Filtro guardado: muestra las tareas que cumplen todos sus criterios. */
+@Entity(tableName = "task_filters")
+data class TaskFilter(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val color: Int,
+    val dateRange: DateRange = DateRange.ANY,
+    /** 0 = cualquiera; si no, prioridad mínima. */
+    val minPriority: Int = 0,
+    /** null = todas las listas. */
+    val listId: Long? = null,
+    val includeDone: Boolean = false,
+    val sortOrder: Int = 0,
 )
