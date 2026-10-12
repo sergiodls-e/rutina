@@ -64,7 +64,10 @@ class WidgetConfigActivity : ComponentActivity() {
         setResult(RESULT_CANCELED, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, wid))
         if (wid == AppWidgetManager.INVALID_APPWIDGET_ID) { finish(); return }
 
-        val provider = AppWidgetManager.getInstance(this).getAppWidgetInfo(wid)?.provider?.className.orEmpty()
+        // Solo se configuran widgets de Rutina (otra app no puede usar esta pantalla con widgets ajenos).
+        val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(wid)?.provider
+        if (info == null || info.packageName != packageName) { finish(); return }
+        val provider = info.className
         val kind = when {
             provider.endsWith("TasksWidgetReceiver") -> WKind.TASKS
             provider.endsWith("HabitReportWidgetReceiver") -> WKind.REPORT

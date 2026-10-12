@@ -138,6 +138,28 @@ fun SettingsScreen(
     val smartInput by prefs.smartInput.collectAsState()
     val folderName = remember(folder) { AutoBackup.folderName(ctx, folder) }
 
+    // Ver, cambiar o quitar la contraseña pide tu PIN, patrón o huella.
+    var afterAuth by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val authLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val next = afterAuth
+        afterAuth = null
+        if (r.resultCode == android.app.Activity.RESULT_OK) next?.invoke() else toast("No se confirmó tu identidad")
+    }
+    fun withAuth(action: () -> Unit) {
+        val km = ctx.getSystemService(android.app.KeyguardManager::class.java)
+        @Suppress("DEPRECATION")
+        val intent = if (km?.isDeviceSecure == true) {
+            km.createConfirmDeviceCredentialIntent("Confirma que eres tú", "Para ver o cambiar tu contraseña de respaldo")
+        } else null
+        if (intent == null) {
+            toast("Tu teléfono no tiene bloqueo de pantalla. Activa un PIN o huella para proteger tu contraseña.")
+            action()
+        } else {
+            afterAuth = action
+            authLauncher.launch(intent)
+        }
+    }
+
     val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) vm.exportTo(ctx.contentResolver, uri, exportPassword) { err ->
             toast(err ?: "Respaldo guardado ✓")
@@ -262,12 +284,12 @@ fun SettingsScreen(
                 SettingRow(
                     "Contraseña de respaldo",
                     if (hasPw) "Guardada cifrada en este teléfono. Se usa en todos tus respaldos." else "Sin contraseña: los respaldos no se cifran",
-                ) { ActionPill(if (hasPw) "Cambiar" else "Establecer") { askPassword = true } }
+                ) { ActionPill(if (hasPw) "Cambiar" else "Establecer") { if (hasPw) { withAuth { askPassword = true } } else { askPassword = true } } }
             }
             if (hasPw) item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { revealPw = true }) { Text("Ver contraseña") }
-                    TextButton(onClick = { askRemovePw = true }) { Text("Quitar", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { withAuth { revealPw = true } }) { Text("Ver contraseña") }
+                    TextButton(onClick = { withAuth { askRemovePw = true } }) { Text("Quitar", color = MaterialTheme.colorScheme.error) }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             }
@@ -605,7 +627,7 @@ private fun PasswordDialog(changing: Boolean, onDismiss: () -> Unit, onSave: (St
                     fontSize = 14.sp,
                 )
                 OutlinedTextField(
-                    pw, { pw = it }, label = { Text("Contraseña (mín. 6)") }, singleLine = true,
+                    pw, { pw = it }, label = { Text("Contraseña (mín. ${com.rutina.app.data.Backup.MIN_PASSWORD})") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
@@ -622,7 +644,7 @@ private fun PasswordDialog(changing: Boolean, onDismiss: () -> Unit, onSave: (St
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(pw) }, enabled = pw.length >= 6 && pw == pw2) { Text("Guardar") } },
+        confirmButton = { TextButton(onClick = { onSave(pw) }, enabled = pw.length >= com.rutina.app.data.Backup.MIN_PASSWORD && pw == pw2) { Text("Guardar") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
     )
 }
@@ -638,7 +660,7 @@ private fun ExportDialog(
     var protect by remember { mutableStateOf(false) }
     var pw by remember { mutableStateOf("") }
     var pw2 by remember { mutableStateOf("") }
-    val valid = useSaved || !protect || (pw.length >= 6 && pw == pw2)
+    val valid = useSaved || !protect || (pw.length >= com.rutina.app.data.Backup.MIN_PASSWORD && pw == pw2)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Crear respaldo") },
@@ -659,7 +681,7 @@ private fun ExportDialog(
                 }
                 if (!useSaved && protect) {
                     OutlinedTextField(
-                        pw, { pw = it }, label = { Text("Contraseña (mín. 6)") }, singleLine = true,
+                        pw, { pw = it }, label = { Text("Contraseña (mín. ${com.rutina.app.data.Backup.MIN_PASSWORD})") }, singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     )

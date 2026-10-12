@@ -1,5 +1,7 @@
 package com.rutina.app.backup
 
+import com.rutina.app.common.privateOnLockScreen
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -186,6 +188,19 @@ object AutoBackup {
         return androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
     }
 
+    /**
+     * Borra las copias temporales que se usaron para compartir.
+     * Las cifradas duran 24 h (para que el botón del aviso siga sirviendo); las demás, 10 minutos.
+     */
+    fun cleanShareCache(ctx: Context, now: Long = System.currentTimeMillis()) {
+        val dir = java.io.File(ctx.cacheDir, "share")
+        dir.listFiles()?.forEach { f ->
+            val encrypted = f.name.endsWith(".json") && runCatching { Backup.isEncrypted(f.readText()) }.getOrDefault(false)
+            val maxAge = if (encrypted) 24 * 3_600_000L else 10 * 60_000L
+            if (now - f.lastModified() > maxAge) runCatching { f.delete() }
+        }
+    }
+
     // ------------------------------------------------------------ avisos
 
     private fun channel(ctx: Context) {
@@ -219,6 +234,7 @@ object AutoBackup {
         channel(ctx)
         val nm = ctx.getSystemService(NotificationManager::class.java)
         val b = NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(R.drawable.ic_stat_check).setAutoCancel(true).setSilent(true)
+            .privateOnLockScreen(ctx, CHANNEL, R.drawable.ic_stat_check, "Aviso de respaldo")
         when (outcome) {
             is Outcome.Ok -> {
                 val share = PendingIntent.getActivity(

@@ -1,5 +1,7 @@
 package com.rutina.app.timer
 
+import com.rutina.app.common.privateOnLockScreen
+
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -251,6 +253,7 @@ class TimerController(private val app: Context, private val db: AppDatabase) {
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
             .setContentIntent(openIntent())
+            .privateOnLockScreen(app, CH_RUNNING, R.drawable.ic_stat_timer, "Temporizador en curso")
         if (s.running) {
             b.setUsesChronometer(true)
                 .setShowWhen(true)
@@ -278,6 +281,7 @@ class TimerController(private val app: Context, private val db: AppDatabase) {
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(openIntent())
+            .privateOnLockScreen(app, CH_DONE, R.drawable.ic_stat_timer, "¡Tiempo cumplido!")
             .build()
         try { nm.notify(ID_DONE, n) } catch (_: SecurityException) { }
     }

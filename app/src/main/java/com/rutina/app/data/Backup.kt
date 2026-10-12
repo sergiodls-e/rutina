@@ -50,7 +50,12 @@ class InvalidBackupException(msg: String) : Exception(msg)
 object Backup {
     private const val APP = "Rutina"
     private const val FORMAT = 1
-    private const val ITERATIONS = 150_000
+    /** Vueltas de PBKDF2 para respaldos nuevos (recomendación OWASP 2023). Los viejos guardan las suyas. */
+    private const val ITERATIONS = 600_000
+    /** Límite para no colgar la app con un archivo manipulado. */
+    private const val MAX_ITERATIONS = 5_000_000
+    /** Largo mínimo de una contraseña nueva. */
+    const val MIN_PASSWORD = 10
 
     // ------------------------------------------------------------ exportar
 
@@ -248,7 +253,7 @@ object Backup {
 
     // ------------------------------------------------------------ cifrado
 
-    /** Cifra con AES-256-GCM; la clave sale de la contraseña con PBKDF2 (150 000 vueltas). */
+    /** Cifra con AES-256-GCM; la clave sale de la contraseña con PBKDF2-SHA256 (600 000 vueltas). */
     fun encrypt(plain: String, password: String): String {
         val rnd = SecureRandom()
         val salt = ByteArray(16).also(rnd::nextBytes)
@@ -274,7 +279,9 @@ object Backup {
         val iv = unb64(o.getString("iv"))
         val data = unb64(o.getString("data"))
         val c = Cipher.getInstance("AES/GCM/NoPadding")
-        c.init(Cipher.DECRYPT_MODE, key(password, salt, o.optInt("iterations", ITERATIONS)), GCMParameterSpec(128, iv))
+        val iterations = o.optInt("iterations", 150_000)
+        if (iterations !in 1_000..MAX_ITERATIONS || salt.size < 8 || iv.size != 12) throw InvalidBackupException("El respaldo está dañado.")
+        c.init(Cipher.DECRYPT_MODE, key(password, salt, iterations), GCMParameterSpec(128, iv))
         return try {
             String(c.doFinal(data), Charsets.UTF_8)
         } catch (e: AEADBadTagException) {

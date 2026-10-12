@@ -265,6 +265,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { runCatching { app.health.syncAll() } }
         // Si ya tocaba un respaldo automático y el teléfono no lo hizo, se hace ahora.
         runCatching { com.rutina.app.backup.AutoBackup.catchUp(this) }
+        // Borra copias temporales viejas de respaldos/informes compartidos.
+        runCatching { com.rutina.app.backup.AutoBackup.cleanShareCache(this) }
     }
 
     override fun onNewIntent(intent: Intent) {

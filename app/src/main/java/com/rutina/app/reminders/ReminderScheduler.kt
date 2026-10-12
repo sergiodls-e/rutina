@@ -1,5 +1,7 @@
 package com.rutina.app.reminders
 
+import com.rutina.app.common.privateOnLockScreen
+
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -155,6 +157,7 @@ class ReminderScheduler(private val app: Context, private val db: AppDatabase) {
             .setAutoCancel(true)
             .setContentIntent(openApp(id))
             .addAction(0, "Completar", action(ACTION_TASK_DONE, t.id, id))
+            .privateOnLockScreen(app, CHANNEL, R.drawable.ic_stat_check, "Tienes una tarea pendiente")
             .build()
         try { nm.notify(id, n) } catch (_: SecurityException) { }
     }
@@ -190,6 +193,7 @@ class ReminderScheduler(private val app: Context, private val db: AppDatabase) {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openApp(id))
+            .privateOnLockScreen(app, CHANNEL, R.drawable.ic_stat_check, "Recordatorio de un hábito")
         if (h.type == TrackingType.COUNT) b.addAction(0, "+" + HabitLogic.amountLabel(h.step, h), action(ACTION_HABIT_ADD, h.id, id))
         try { nm.notify(id, b.build()) } catch (_: SecurityException) { }
     }
