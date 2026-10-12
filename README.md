@@ -29,5 +29,5 @@ app/src/main/java/com/rutina/app/
 7. ✅ Recordatorios y widgets
 8. ✅ Estado de ánimo, peso y Health Connect
 9. ✅ Ajustes, respaldo/restauración (cifrado opcional), logros, archivo de hábitos y tutorial
-10. Tareas avanzadas: entrada inteligente, omitir, repetición personalizada, selección múltiple, ordenar, posponer
+10. ✅ Tareas avanzadas: entrada inteligente, omitir, repetición personalizada, historial, selección múltiple, agrupar/ordenar, posponer; respaldo automático con contraseña fija
 11. Hábitos y widgets avanzados: listas y prioridades de hábitos, reordenar, unidades propias, informes, más widgets
